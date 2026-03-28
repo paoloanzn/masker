@@ -13,8 +13,8 @@ func TestModeString(t *testing.T) {
 		want string
 	}{
 		{mode: ModeFocus, want: "Focus"},
+		{mode: ModeADHD, want: "ADHD / Attention"},
 		{mode: ModeBrown, want: "Brown"},
-		{mode: ModePink, want: "Pink"},
 		{mode: ModeSpeech, want: "Speech-shaped"},
 		{mode: Mode(99), want: "Unknown"},
 	}
@@ -33,10 +33,10 @@ func TestModeCycle(t *testing.T) {
 		next     Mode
 		previous Mode
 	}{
-		{name: "focus wraps", start: ModeFocus, next: ModeBrown, previous: ModeSpeech},
-		{name: "brown wraps", start: ModeBrown, next: ModePink, previous: ModeFocus},
-		{name: "pink wraps", start: ModePink, next: ModeSpeech, previous: ModeBrown},
-		{name: "speech wraps", start: ModeSpeech, next: ModeFocus, previous: ModePink},
+		{name: "focus wraps", start: ModeFocus, next: ModeADHD, previous: ModeSpeech},
+		{name: "adhd wraps", start: ModeADHD, next: ModeBrown, previous: ModeFocus},
+		{name: "brown wraps", start: ModeBrown, next: ModeSpeech, previous: ModeADHD},
+		{name: "speech wraps", start: ModeSpeech, next: ModeFocus, previous: ModeBrown},
 		{name: "unknown falls back", start: Mode(99), next: ModeFocus, previous: ModeFocus},
 	}
 
@@ -103,6 +103,32 @@ func TestFocusPresetCycle(t *testing.T) {
 	}
 }
 
+func TestADHDPresetCycle(t *testing.T) {
+	tests := []struct {
+		name     string
+		start    ADHDPreset
+		next     ADHDPreset
+		previous ADHDPreset
+		want     string
+	}{
+		{name: "white wraps", start: ADHDPresetWhite, next: ADHDPresetPink, previous: ADHDPresetPink, want: "White"},
+		{name: "pink wraps", start: ADHDPresetPink, next: ADHDPresetWhite, previous: ADHDPresetWhite, want: "Pink"},
+		{name: "unknown falls back", start: ADHDPreset(99), next: ADHDPresetWhite, previous: ADHDPresetWhite, want: "Unknown"},
+	}
+
+	for _, test := range tests {
+		if got := test.start.Next(); got != test.next {
+			t.Fatalf("%s next = %v, want %v", test.name, got, test.next)
+		}
+		if got := test.start.Previous(); got != test.previous {
+			t.Fatalf("%s previous = %v, want %v", test.name, got, test.previous)
+		}
+		if got := test.start.String(); got != test.want {
+			t.Fatalf("%s string = %q, want %q", test.name, got, test.want)
+		}
+	}
+}
+
 func TestPausedState(t *testing.T) {
 	generator := NewGenerator()
 
@@ -124,20 +150,30 @@ func TestPausedState(t *testing.T) {
 func TestModeGainCompensationOrdering(t *testing.T) {
 	brown := modeGain(ModeBrown)
 	focus := modeGain(ModeFocus)
-	pink := modeGain(ModePink)
+	adhdWhite := adhdPresetGain(ADHDPresetWhite)
+	adhdPink := adhdPresetGain(ADHDPresetPink)
 	speech := modeGain(ModeSpeech)
 
 	if !(brown > focus) {
 		t.Fatalf("brown gain = %.2f, want > focus gain %.2f", brown, focus)
 	}
-	if !(focus > pink) {
-		t.Fatalf("focus gain = %.2f, want > pink gain %.2f", focus, pink)
+	if !(focus > adhdPink) {
+		t.Fatalf("focus gain = %.2f, want > adhd pink gain %.2f", focus, adhdPink)
 	}
-	if !(brown > pink) {
-		t.Fatalf("brown gain = %.2f, want > pink gain %.2f", brown, pink)
+	if !(focus > adhdPink) {
+		t.Fatalf("focus gain = %.2f, want > adhd pink gain %.2f", focus, adhdPink)
 	}
-	if !(pink > speech) {
-		t.Fatalf("pink gain = %.2f, want > speech gain %.2f", pink, speech)
+	if !(brown > adhdPink) {
+		t.Fatalf("brown gain = %.2f, want > adhd pink gain %.2f", brown, adhdPink)
+	}
+	if !(adhdPink > adhdWhite) {
+		t.Fatalf("adhd pink gain = %.2f, want > adhd white gain %.2f", adhdPink, adhdWhite)
+	}
+	if !(adhdWhite > speech) {
+		t.Fatalf("adhd white gain = %.2f, want > speech gain %.2f", adhdWhite, speech)
+	}
+	if !(adhdPink > speech) {
+		t.Fatalf("adhd pink gain = %.2f, want > speech gain %.2f", adhdPink, speech)
 	}
 }
 
@@ -148,11 +184,20 @@ func TestModeGainCompensationValues(t *testing.T) {
 	if got := modeGain(ModeBrown); got != 4.10 {
 		t.Fatalf("brown gain = %.2f, want 4.10", got)
 	}
-	if got := modeGain(ModePink); got != 1.00 {
-		t.Fatalf("pink gain = %.2f, want 1.00", got)
-	}
 	if got := modeGain(ModeSpeech); got != 0.24 {
 		t.Fatalf("speech gain = %.2f, want 0.24", got)
+	}
+	if got := adhdPresetGain(ADHDPresetWhite); got != 0.42 {
+		t.Fatalf("adhd white gain = %.2f, want 0.42", got)
+	}
+	if got := adhdPresetGain(ADHDPresetPink); got != 1.00 {
+		t.Fatalf("adhd pink gain = %.2f, want 1.00", got)
+	}
+}
+
+func TestADHDPinkGainMatchesStandardPink(t *testing.T) {
+	if got, want := adhdPresetGain(ADHDPresetPink), float32(1.00); got != want {
+		t.Fatalf("adhd pink gain = %.2f, want prior standalone pink gain %.2f", got, want)
 	}
 }
 
@@ -175,6 +220,15 @@ func TestFocusDensityAddsLayers(t *testing.T) {
 	}
 	if !(high > low) {
 		t.Fatalf("high rms = %.6f, want > low rms %.6f", high, low)
+	}
+}
+
+func TestADHDWhitePresetKeepsMoreHighBandEnergyThanPink(t *testing.T) {
+	whiteRatio := highBandRatio(ADHDPresetWhite)
+	pinkRatio := highBandRatio(ADHDPresetPink)
+
+	if !(whiteRatio > pinkRatio) {
+		t.Fatalf("white high-band ratio = %.6f, want > pink high-band ratio %.6f", whiteRatio, pinkRatio)
 	}
 }
 
@@ -388,6 +442,35 @@ func focusRMS(preset FocusPreset) float64 {
 	}
 
 	return math.Sqrt(energy / float64(counted))
+}
+
+func highBandRatio(preset ADHDPreset) float64 {
+	generator := NewGenerator()
+	generator.SetMode(ModeADHD)
+	generator.SetADHDPreset(preset)
+
+	const frameCount = config.SampleRate * 2
+	samples := make([]float32, frameCount*2)
+	generator.Fill(samples)
+
+	highpass := NewOnePoleHP(2000)
+	lowpass := NewOnePoleLP(300)
+
+	var highEnergy float64
+	var lowEnergy float64
+	for i := 0; i < len(samples); i += 2 {
+		mid := 0.5 * (samples[i] + samples[i+1])
+		high := highpass.Process(mid)
+		low := lowpass.Process(mid)
+		highEnergy += float64(high * high)
+		lowEnergy += float64(low * low)
+	}
+
+	if lowEnergy == 0 {
+		return math.Inf(1)
+	}
+
+	return highEnergy / lowEnergy
 }
 
 func focusMotionEnergy(preset FocusPreset) float64 {

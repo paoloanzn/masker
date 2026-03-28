@@ -11,8 +11,8 @@ type Mode int32
 
 const (
 	ModeFocus Mode = iota
+	ModeADHD
 	ModeBrown
-	ModePink
 	ModeSpeech
 )
 
@@ -20,10 +20,10 @@ func (m Mode) String() string {
 	switch m {
 	case ModeFocus:
 		return "Focus"
+	case ModeADHD:
+		return "ADHD / Attention"
 	case ModeBrown:
 		return "Brown"
-	case ModePink:
-		return "Pink"
 	case ModeSpeech:
 		return "Speech-shaped"
 	default:
@@ -34,10 +34,10 @@ func (m Mode) String() string {
 func (m Mode) Next() Mode {
 	switch m {
 	case ModeFocus:
+		return ModeADHD
+	case ModeADHD:
 		return ModeBrown
 	case ModeBrown:
-		return ModePink
-	case ModePink:
 		return ModeSpeech
 	case ModeSpeech:
 		return ModeFocus
@@ -50,21 +50,55 @@ func (m Mode) Previous() Mode {
 	switch m {
 	case ModeFocus:
 		return ModeSpeech
-	case ModeBrown:
+	case ModeADHD:
 		return ModeFocus
-	case ModePink:
-		return ModeBrown
+	case ModeBrown:
+		return ModeADHD
 	case ModeSpeech:
-		return ModePink
+		return ModeBrown
 	default:
 		return ModeFocus
 	}
+}
+
+type ADHDPreset int32
+
+const (
+	ADHDPresetWhite ADHDPreset = iota
+	ADHDPresetPink
+)
+
+func (p ADHDPreset) String() string {
+	switch p {
+	case ADHDPresetWhite:
+		return "White"
+	case ADHDPresetPink:
+		return "Pink"
+	default:
+		return "Unknown"
+	}
+}
+
+func (p ADHDPreset) Next() ADHDPreset {
+	switch p {
+	case ADHDPresetWhite:
+		return ADHDPresetPink
+	case ADHDPresetPink:
+		return ADHDPresetWhite
+	default:
+		return ADHDPresetWhite
+	}
+}
+
+func (p ADHDPreset) Previous() ADHDPreset {
+	return p.Next()
 }
 
 type Generator struct {
 	rng xorShift32
 
 	modeBits        atomic.Int32
+	adhdPresetBits  atomic.Int32
 	focusPresetBits atomic.Int32
 	pausedBits      atomic.Bool
 	volumeBits      atomic.Uint32
@@ -90,6 +124,7 @@ func NewGenerator() *Generator {
 		focus:   NewFocusState(),
 	}
 	generator.SetMode(ModeFocus)
+	generator.SetADHDPreset(ADHDPresetWhite)
 	generator.SetFocusPreset(FocusPresetMedium)
 	generator.SetVolume(config.DefaultVolume)
 	return generator
@@ -101,6 +136,19 @@ func (g *Generator) Mode() Mode {
 
 func (g *Generator) SetMode(mode Mode) {
 	g.modeBits.Store(int32(mode))
+}
+
+func (g *Generator) ADHDPreset() ADHDPreset {
+	return ADHDPreset(g.adhdPresetBits.Load())
+}
+
+func (g *Generator) SetADHDPreset(preset ADHDPreset) {
+	switch preset {
+	case ADHDPresetWhite, ADHDPresetPink:
+		g.adhdPresetBits.Store(int32(preset))
+	default:
+		g.adhdPresetBits.Store(int32(ADHDPresetWhite))
+	}
 }
 
 func (g *Generator) FocusPreset() FocusPreset {
@@ -149,7 +197,8 @@ func (g *Generator) Fill(samples []float32) {
 	}
 
 	mode := g.Mode()
-	volume := g.Volume() * modeGain(mode)
+	adhdPreset := g.ADHDPreset()
+	volume := g.Volume() * outputGain(mode, adhdPreset)
 	focusPreset := g.FocusPreset()
 
 	for i := 0; i < len(samples); i += 2 {
@@ -157,10 +206,10 @@ func (g *Generator) Fill(samples []float32) {
 		switch mode {
 		case ModeFocus:
 			left, right = g.focus.NextPair(&g.rng, focusPreset)
+		case ModeADHD:
+			left, right = g.nextADHDPair(adhdPreset)
 		case ModeBrown:
 			left, right = g.nextBrownPair()
-		case ModePink:
-			left, right = g.nextPinkPair()
 		case ModeSpeech:
 			left, right = g.nextSpeechPair()
 		default:
@@ -172,6 +221,13 @@ func (g *Generator) Fill(samples []float32) {
 	}
 }
 
+func outputGain(mode Mode, adhdPreset ADHDPreset) float32 {
+	if mode == ModeADHD {
+		return adhdPresetGain(adhdPreset)
+	}
+	return modeGain(mode)
+}
+
 func modeGain(mode Mode) float32 {
 	switch mode {
 	case ModeFocus:
@@ -179,13 +235,39 @@ func modeGain(mode Mode) float32 {
 	case ModeBrown:
 		// Calibrated against hearing-weighted measurements so mode switches are less jarring.
 		return 4.10
-	case ModePink:
-		return 1.00
 	case ModeSpeech:
 		return 0.24
 	default:
 		return 1.00
 	}
+}
+
+func adhdPresetGain(preset ADHDPreset) float32 {
+	switch preset {
+	case ADHDPresetWhite:
+		// White noise is compensated down to offset its brighter perceived intensity.
+		return 0.42
+	case ADHDPresetPink:
+		// Match the prior standalone pink calibration so switching is not jarring.
+		return 1.00
+	default:
+		return 0.42
+	}
+}
+
+func (g *Generator) nextADHDPair(preset ADHDPreset) (float32, float32) {
+	switch preset {
+	case ADHDPresetWhite:
+		return g.nextWhitePair()
+	case ADHDPresetPink:
+		return g.nextPinkPair()
+	default:
+		return g.nextWhitePair()
+	}
+}
+
+func (g *Generator) nextWhitePair() (float32, float32) {
+	return g.rng.nextFloat32(), g.rng.nextFloat32()
 }
 
 func (g *Generator) nextBrownPair() (float32, float32) {

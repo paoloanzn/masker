@@ -115,6 +115,7 @@ static void updateMaskerNowPlayingInfo(const char *modeName, _Bool paused) {
 		[MPNowPlayingInfoCenter defaultCenter].playbackState = paused ? MPNowPlayingPlaybackStatePaused : MPNowPlayingPlaybackStatePlaying;
 	}
 }
+
 */
 import "C"
 
