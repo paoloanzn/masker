@@ -62,7 +62,9 @@ type FocusState struct {
 	padPhasesR [3]float64
 	bedPhasesL [3]float64
 	bedPhasesR [3]float64
-	lfoPhase   float64
+	padLFO     float64
+	padDrift   float64
+	bedDrift   float64
 
 	textureHP1L OnePoleHP
 	textureHP1R OnePoleHP
@@ -100,25 +102,27 @@ func (s *FocusState) NextPair(rng *xorShift32, density Density) (float32, float3
 	const sampleRate = float64(config.SampleRate)
 
 	beatSamples := sampleRate * 60.0 / focusTempoBPM
+	barSamples := beatSamples * 4.0
 	beatOffset := math.Mod(float64(s.sampleIndex), beatSamples)
 	beatTime := beatOffset / sampleRate
-	barPhase := math.Mod(float64(s.sampleIndex)/(beatSamples*4), 1.0)
+	barPhase := math.Mod(float64(s.sampleIndex)/barSamples, 1.0)
+	barIndex := uint64(float64(s.sampleIndex) / barSamples)
 
 	kick := softKick(beatTime)
 	padL, padR := s.nextPad(barPhase)
-	bedL, bedR := s.nextBed()
-	textureL, textureR := s.nextTexture(rng)
+	bedL, bedR := s.nextBed(barPhase)
+	textureL, textureR := s.nextTexture(rng, barPhase, barIndex)
 
-	left := 0.42*padL + 0.40*float64(kick)
-	right := 0.42*padR + 0.40*float64(kick)
+	left := 0.48*padL + 0.26*float64(kick)
+	right := 0.48*padR + 0.26*float64(kick)
 
 	switch density {
 	case DensityMedium:
-		left += 0.24 * bedL
-		right += 0.24 * bedR
+		left += 0.22 * bedL
+		right += 0.22 * bedR
 	case DensityHigh:
-		left += 0.24*bedL + 0.10*textureL
-		right += 0.24*bedR + 0.10*textureR
+		left += 0.22*bedL + 0.055*textureL
+		right += 0.22*bedR + 0.055*textureR
 	}
 
 	leftSample := s.mixLP2L.Process(s.mixLP1L.Process(float32(left)))
@@ -129,21 +133,27 @@ func (s *FocusState) NextPair(rng *xorShift32, density Density) (float32, float3
 }
 
 func softKick(beatTime float64) float32 {
-	attack := 1.0 - math.Exp(-beatTime*160.0)
-	decay := math.Exp(-beatTime * 6.2)
-	fundamental := math.Sin(2.0*math.Pi*54.0*beatTime + 0.22*math.Sin(2.0*math.Pi*beatTime))
-	harmonic := math.Sin(2.0 * math.Pi * 108.0 * beatTime)
-	return float32(attack * decay * (0.82*fundamental + 0.18*harmonic))
+	attack := 1.0 - math.Exp(-beatTime*44.0)
+	decay := math.Exp(-beatTime * 10.8)
+	fundamental := math.Sin(2.0 * math.Pi * 48.0 * beatTime)
+	undertone := math.Sin(2.0*math.Pi*42.0*beatTime + 0.06*math.Sin(2.0*math.Pi*0.35*beatTime))
+	return float32(attack * decay * (0.78*fundamental + 0.22*undertone))
 }
 
 func (s *FocusState) nextPad(barPhase float64) (float64, float64) {
-	lfo := 0.94 + 0.06*math.Sin(s.lfoPhase)
-	s.lfoPhase = advancePhase(s.lfoPhase, 0.045)
+	lfo := 0.95 + 0.05*math.Sin(s.padLFO)
+	s.padLFO = advancePhase(s.padLFO, 0.040)
+	s.padDrift = advancePhase(s.padDrift, 0.009)
 
 	frequencies := [3]float64{73.42, 110.00, 146.83}
 	detune := [3]float64{0.9985, 1.0018, 0.9992}
-	weights := [3]float64{0.42, 0.34, 0.24}
-	swirl := 0.92 + 0.08*math.Sin(2.0*math.Pi*barPhase)
+	weights := [3]float64{
+		0.42 + 0.018*math.Sin(s.padDrift),
+		0.34 + 0.014*math.Sin(s.padDrift+2.1),
+		0.24 + 0.012*math.Sin(s.padDrift+4.0),
+	}
+	normalizeWeights(&weights)
+	swirl := 0.93 + 0.04*math.Sin(2.0*math.Pi*barPhase) + 0.02*math.Sin(s.padDrift+1.4)
 
 	var left, right float64
 	for i := range frequencies {
@@ -156,10 +166,18 @@ func (s *FocusState) nextPad(barPhase float64) (float64, float64) {
 	return 0.55 * swirl * lfo * left, 0.55 * swirl * lfo * right
 }
 
-func (s *FocusState) nextBed() (float64, float64) {
+func (s *FocusState) nextBed(barPhase float64) (float64, float64) {
+	s.bedDrift = advancePhase(s.bedDrift, 0.006)
+
 	frequencies := [3]float64{174.61, 220.00, 261.63}
 	detune := [3]float64{1.0009, 0.9991, 1.0012}
-	weights := [3]float64{0.40, 0.35, 0.25}
+	weights := [3]float64{
+		0.40 + 0.016*math.Sin(s.bedDrift),
+		0.35 + 0.014*math.Sin(s.bedDrift+2.4),
+		0.25 + 0.012*math.Sin(s.bedDrift+4.2),
+	}
+	normalizeWeights(&weights)
+	level := 0.28 * (0.92 + 0.05*math.Sin(s.bedDrift+0.8) + 0.02*math.Sin(2.0*math.Pi*barPhase))
 
 	var left, right float64
 	for i := range frequencies {
@@ -169,27 +187,22 @@ func (s *FocusState) nextBed() (float64, float64) {
 		right += weights[i] * math.Sin(s.bedPhasesR[i])
 	}
 
-	return 0.33 * left, 0.33 * right
+	return level * left, level * right
 }
 
-func (s *FocusState) nextTexture(rng *xorShift32) (float64, float64) {
-	const sampleRate = float64(config.SampleRate)
-
-	subdivisionSamples := sampleRate * 60.0 / (focusTempoBPM * 2.0)
-	offset := math.Mod(float64(s.sampleIndex), subdivisionSamples)
-	timeInSubdivision := offset / sampleRate
-
-	attack := 1.0 - math.Exp(-timeInSubdivision*26.0)
-	decay := math.Exp(-timeInSubdivision * 5.8)
-	envelope := attack * decay
-
+func (s *FocusState) nextTexture(rng *xorShift32, barPhase float64, barIndex uint64) (float64, float64) {
 	whiteL := float64(rng.nextFloat32())
 	whiteR := float64(rng.nextFloat32())
 
 	left := s.textureLP2L.Process(s.textureLP1L.Process(s.textureHP2L.Process(s.textureHP1L.Process(float32(whiteL)))))
 	right := s.textureLP2R.Process(s.textureLP1R.Process(s.textureHP2R.Process(s.textureHP1R.Process(float32(whiteR)))))
 
-	return envelope * float64(left), envelope * float64(right)
+	currentDepth := 0.18 + 0.10*unitHash(barIndex)
+	nextDepth := 0.18 + 0.10*unitHash(barIndex+1)
+	depth := lerp(currentDepth, nextDepth, smoothstep(barPhase))
+	contour := 0.88 + 0.12*math.Sin(2.0*math.Pi*(barPhase-0.17))
+
+	return depth * contour * float64(left), depth * contour * float64(right)
 }
 
 func advancePhase(phase, frequency float64) float64 {
@@ -198,4 +211,39 @@ func advancePhase(phase, frequency float64) float64 {
 		phase -= 2.0 * math.Pi
 	}
 	return phase
+}
+
+func normalizeWeights(weights *[3]float64) {
+	total := weights[0] + weights[1] + weights[2]
+	if total == 0 {
+		return
+	}
+
+	for i := range weights {
+		weights[i] /= total
+	}
+}
+
+func smoothstep(value float64) float64 {
+	if value <= 0 {
+		return 0
+	}
+	if value >= 1 {
+		return 1
+	}
+	return value * value * (3.0 - 2.0*value)
+}
+
+func lerp(a, b, t float64) float64 {
+	return a + (b-a)*t
+}
+
+func unitHash(value uint64) float64 {
+	hashed := value + 0x9e3779b97f4a7c15
+	hashed ^= hashed >> 30
+	hashed *= 0xbf58476d1ce4e5b9
+	hashed ^= hashed >> 27
+	hashed *= 0x94d049bb133111eb
+	hashed ^= hashed >> 31
+	return float64(hashed&0xffff) / 65535.0
 }

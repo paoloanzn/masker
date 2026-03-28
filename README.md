@@ -5,9 +5,9 @@ Masker is a small Go menu bar utility that plays continuous masking audio for op
 ## Features
 
 - Lives in the macOS menu bar with a minimal tray UI
-- Starts in a slow-beat focus mode with fixed-tempo instrumental audio
-- Adjust focus density without changing the macro-tempo
-- Switch between focus, brown, pink, and speech-shaped masking modes
+- Starts in `Focus`, the recommended slow-beat mode for general productivity
+- Adjust Focus density without changing the macro-tempo
+- Switch between Focus and masking-oriented Brown, Pink, and Speech-shaped modes
 - Adjust volume without reopening the app
 - Detaches from the terminal by default when started from the command line
 
@@ -54,11 +54,13 @@ Masker will relaunch itself in the background by default so the shell prompt ret
 masker --foreground
 ```
 
-The default `Focus` mode uses a steady 4/4 slow beat with low-density, medium-density, and high-density variations:
+The default `Focus` mode is the main recommended preset for general productivity. It uses a steady 4/4 slow beat with low-density, medium-density, and high-density variations:
 
-- `Low`: sparse pad plus soft kick pulse
-- `Medium`: adds a soft harmonic bed
-- `High`: adds subtle rhythmic texture while keeping the same tempo
+- `Low`: sparse pad plus a very soft timing anchor
+- `Medium`: the main recommended preset; adds a soft harmonic bed
+- `High`: adds very subtle background motion while keeping the same tempo and low salience
+
+The density controls apply only to `Focus`. `Brown`, `Pink`, and `Speech-shaped` remain masking-style options rather than slow-beat productivity presets.
 
 ## Development
 

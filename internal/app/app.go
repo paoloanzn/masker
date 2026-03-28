@@ -53,16 +53,16 @@ func (a *App) onReady() {
 
 	systray.AddSeparator()
 
-	a.focus = systray.AddMenuItemCheckbox("Focus", "Slow-beat instrumental focus engine", true)
-	a.brown = systray.AddMenuItemCheckbox("Brown", "Low rumble / HVAC / travel", false)
-	a.pink = systray.AddMenuItemCheckbox("Pink", "General ambient masking", false)
-	a.speech = systray.AddMenuItemCheckbox("Speech-shaped", "Target the speech band more directly", false)
+	a.focus = systray.AddMenuItemCheckbox("Focus (Recommended)", "Recommended slow-beat mode for general productivity", true)
+	a.brown = systray.AddMenuItemCheckbox("Brown", "Masking option for low rumble, HVAC, or travel", false)
+	a.pink = systray.AddMenuItemCheckbox("Pink", "Masking option for general ambient coverage", false)
+	a.speech = systray.AddMenuItemCheckbox("Speech-shaped", "Masking option that targets the speech band more directly", false)
 
 	systray.AddSeparator()
 
-	a.densityLow = systray.AddMenuItemCheckbox("Density: Low", "Sparse pad with a soft kick pulse", false)
-	a.densityMedium = systray.AddMenuItemCheckbox("Density: Medium", "Add a soft harmonic bed", true)
-	a.densityHigh = systray.AddMenuItemCheckbox("Density: High", "Add subtle rhythmic texture", false)
+	a.densityLow = systray.AddMenuItemCheckbox("Density: Low", "Focus only: sparse pad with a very soft timing anchor", false)
+	a.densityMedium = systray.AddMenuItemCheckbox("Density: Medium", "Focus only: recommended preset with a soft harmonic bed", true)
+	a.densityHigh = systray.AddMenuItemCheckbox("Density: High", "Focus only: add very subtle background motion", false)
 
 	systray.AddSeparator()
 
@@ -143,6 +143,17 @@ func (a *App) updateChecks() {
 	case noise.DensityHigh:
 		a.densityHigh.Check()
 	}
+
+	if mode == noise.ModeFocus {
+		a.densityLow.Enable()
+		a.densityMedium.Enable()
+		a.densityHigh.Enable()
+		return
+	}
+
+	a.densityLow.Disable()
+	a.densityMedium.Disable()
+	a.densityHigh.Disable()
 }
 
 func (a *App) syncUI() {
