@@ -103,11 +103,12 @@ func (g *Generator) Fill(samples []float32) {
 func modeGain(mode Mode) float32 {
 	switch mode {
 	case ModeBrown:
-		return 1.45
+		// Calibrated against hearing-weighted measurements so mode switches are less jarring.
+		return 4.10
 	case ModePink:
 		return 1.00
 	case ModeSpeech:
-		return 0.62
+		return 0.24
 	default:
 		return 1.00
 	}
