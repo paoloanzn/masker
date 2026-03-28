@@ -12,16 +12,17 @@ import (
 )
 
 type App struct {
-	engine        *audio.Engine
-	generator     *noise.Generator
-	status        *systray.MenuItem
-	focus         *systray.MenuItem
-	brown         *systray.MenuItem
-	pink          *systray.MenuItem
-	speech        *systray.MenuItem
-	densityLow    *systray.MenuItem
-	densityMedium *systray.MenuItem
-	densityHigh   *systray.MenuItem
+	engine          *audio.Engine
+	generator       *noise.Generator
+	status          *systray.MenuItem
+	focus           *systray.MenuItem
+	brown           *systray.MenuItem
+	pink            *systray.MenuItem
+	speech          *systray.MenuItem
+	presetLow       *systray.MenuItem
+	presetMedium    *systray.MenuItem
+	presetHigh      *systray.MenuItem
+	presetCognitive *systray.MenuItem
 }
 
 func New() *App {
@@ -60,9 +61,10 @@ func (a *App) onReady() {
 
 	systray.AddSeparator()
 
-	a.densityLow = systray.AddMenuItemCheckbox("Density: Low", "Focus only: sparse pad with a very soft timing anchor", false)
-	a.densityMedium = systray.AddMenuItemCheckbox("Density: Medium", "Focus only: recommended preset with a soft harmonic bed", true)
-	a.densityHigh = systray.AddMenuItemCheckbox("Density: High", "Focus only: add very subtle background motion", false)
+	a.presetLow = systray.AddMenuItemCheckbox("Preset: Low", "Focus only: sparse pad plus a soft beat-synced pulse bed", false)
+	a.presetMedium = systray.AddMenuItemCheckbox("Preset: Medium", "Focus only: recommended preset with a soft harmonic bed and structured pulse overlay", true)
+	a.presetHigh = systray.AddMenuItemCheckbox("Preset: High", "Focus only: add very subtle background motion while preserving the pulse scaffold", false)
+	a.presetCognitive = systray.AddMenuItemCheckbox("Preset: High cognitive load", "Focus only: same BPM range with reduced harmonic motion and lower melodic novelty", false)
 
 	systray.AddSeparator()
 
@@ -87,12 +89,14 @@ func (a *App) onReady() {
 				a.generator.SetMode(noise.ModePink)
 			case <-a.speech.ClickedCh:
 				a.generator.SetMode(noise.ModeSpeech)
-			case <-a.densityLow.ClickedCh:
-				a.generator.SetDensity(noise.DensityLow)
-			case <-a.densityMedium.ClickedCh:
-				a.generator.SetDensity(noise.DensityMedium)
-			case <-a.densityHigh.ClickedCh:
-				a.generator.SetDensity(noise.DensityHigh)
+			case <-a.presetLow.ClickedCh:
+				a.generator.SetFocusPreset(noise.FocusPresetLow)
+			case <-a.presetMedium.ClickedCh:
+				a.generator.SetFocusPreset(noise.FocusPresetMedium)
+			case <-a.presetHigh.ClickedCh:
+				a.generator.SetFocusPreset(noise.FocusPresetHigh)
+			case <-a.presetCognitive.ClickedCh:
+				a.generator.SetFocusPreset(noise.FocusPresetHighCognitiveLoad)
 			case <-volumeUp.ClickedCh:
 				a.generator.SetVolume(a.generator.Volume() + config.VolumeStep)
 			case <-volumeDown.ClickedCh:
@@ -130,34 +134,39 @@ func (a *App) updateChecks() {
 		a.speech.Check()
 	}
 
-	density := a.generator.Density()
-	a.densityLow.Uncheck()
-	a.densityMedium.Uncheck()
-	a.densityHigh.Uncheck()
+	focusPreset := a.generator.FocusPreset()
+	a.presetLow.Uncheck()
+	a.presetMedium.Uncheck()
+	a.presetHigh.Uncheck()
+	a.presetCognitive.Uncheck()
 
-	switch density {
-	case noise.DensityLow:
-		a.densityLow.Check()
-	case noise.DensityMedium:
-		a.densityMedium.Check()
-	case noise.DensityHigh:
-		a.densityHigh.Check()
+	switch focusPreset {
+	case noise.FocusPresetLow:
+		a.presetLow.Check()
+	case noise.FocusPresetMedium:
+		a.presetMedium.Check()
+	case noise.FocusPresetHigh:
+		a.presetHigh.Check()
+	case noise.FocusPresetHighCognitiveLoad:
+		a.presetCognitive.Check()
 	}
 
 	if mode == noise.ModeFocus {
-		a.densityLow.Enable()
-		a.densityMedium.Enable()
-		a.densityHigh.Enable()
+		a.presetLow.Enable()
+		a.presetMedium.Enable()
+		a.presetHigh.Enable()
+		a.presetCognitive.Enable()
 		return
 	}
 
-	a.densityLow.Disable()
-	a.densityMedium.Disable()
-	a.densityHigh.Disable()
+	a.presetLow.Disable()
+	a.presetMedium.Disable()
+	a.presetHigh.Disable()
+	a.presetCognitive.Disable()
 }
 
 func (a *App) syncUI() {
-	if a.focus != nil && a.brown != nil && a.pink != nil && a.speech != nil && a.densityLow != nil && a.densityMedium != nil && a.densityHigh != nil {
+	if a.focus != nil && a.brown != nil && a.pink != nil && a.speech != nil && a.presetLow != nil && a.presetMedium != nil && a.presetHigh != nil && a.presetCognitive != nil {
 		a.updateChecks()
 	}
 	if a.status != nil {
@@ -198,7 +207,7 @@ func (a *App) statusText() string {
 	}
 	mode := a.generator.Mode().String()
 	if a.generator.Mode() == noise.ModeFocus {
-		mode = fmt.Sprintf("%s (%s density)", mode, a.generator.Density().String())
+		mode = fmt.Sprintf("%s (%s preset)", mode, a.generator.FocusPreset().String())
 	}
 	return fmt.Sprintf("%s | Mode: %s | Vol: %.3f", state, mode, a.generator.Volume())
 }

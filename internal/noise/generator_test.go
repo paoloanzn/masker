@@ -70,23 +70,24 @@ func TestDefaultFocusModeAndDensity(t *testing.T) {
 	if got := generator.Mode(); got != ModeFocus {
 		t.Fatalf("default mode = %v, want %v", got, ModeFocus)
 	}
-	if got := generator.Density(); got != DensityMedium {
-		t.Fatalf("default density = %v, want %v", got, DensityMedium)
+	if got := generator.FocusPreset(); got != FocusPresetMedium {
+		t.Fatalf("default focus preset = %v, want %v", got, FocusPresetMedium)
 	}
 }
 
-func TestDensityCycle(t *testing.T) {
+func TestFocusPresetCycle(t *testing.T) {
 	tests := []struct {
 		name     string
-		start    Density
-		next     Density
-		previous Density
+		start    FocusPreset
+		next     FocusPreset
+		previous FocusPreset
 		want     string
 	}{
-		{name: "low wraps", start: DensityLow, next: DensityMedium, previous: DensityHigh, want: "Low"},
-		{name: "medium wraps", start: DensityMedium, next: DensityHigh, previous: DensityLow, want: "Medium"},
-		{name: "high wraps", start: DensityHigh, next: DensityLow, previous: DensityMedium, want: "High"},
-		{name: "unknown falls back", start: Density(99), next: DensityMedium, previous: DensityMedium, want: "Unknown"},
+		{name: "low wraps", start: FocusPresetLow, next: FocusPresetMedium, previous: FocusPresetHighCognitiveLoad, want: "Low"},
+		{name: "medium wraps", start: FocusPresetMedium, next: FocusPresetHigh, previous: FocusPresetLow, want: "Medium"},
+		{name: "high wraps", start: FocusPresetHigh, next: FocusPresetHighCognitiveLoad, previous: FocusPresetMedium, want: "High"},
+		{name: "cognitive wraps", start: FocusPresetHighCognitiveLoad, next: FocusPresetLow, previous: FocusPresetHigh, want: "High cognitive load"},
+		{name: "unknown falls back", start: FocusPreset(99), next: FocusPresetMedium, previous: FocusPresetMedium, want: "Unknown"},
 	}
 
 	for _, test := range tests {
@@ -156,15 +157,61 @@ func TestModeGainCompensationValues(t *testing.T) {
 }
 
 func TestFocusDensityAddsLayers(t *testing.T) {
-	low := focusRMS(DensityLow)
-	medium := focusRMS(DensityMedium)
-	high := focusRMS(DensityHigh)
+	low := focusRMS(FocusPresetLow)
+	medium := focusRMS(FocusPresetMedium)
+	high := focusRMS(FocusPresetHigh)
+	cognitive := focusRMS(FocusPresetHighCognitiveLoad)
+	mediumMotion := focusMotionEnergy(FocusPresetMedium)
+	highMotion := focusMotionEnergy(FocusPresetHigh)
 
 	if !(medium > low) {
 		t.Fatalf("medium rms = %.6f, want > low rms %.6f", medium, low)
 	}
-	if !(high > medium) {
-		t.Fatalf("high rms = %.6f, want > medium rms %.6f", high, medium)
+	if !(highMotion > mediumMotion) {
+		t.Fatalf("high motion = %.6f, want > medium motion %.6f", highMotion, mediumMotion)
+	}
+	if !(cognitive > low) {
+		t.Fatalf("cognitive rms = %.6f, want > low rms %.6f", cognitive, low)
+	}
+	if !(high > low) {
+		t.Fatalf("high rms = %.6f, want > low rms %.6f", high, low)
+	}
+}
+
+func TestStructuredPulseContourStaysSubtle(t *testing.T) {
+	const depth = 0.12
+
+	start := structuredPulseContour(0.0, depth)
+	peak := structuredPulseContour(0.18, depth)
+	tail := structuredPulseContour(0.95, depth)
+
+	if start != 1.0 {
+		t.Fatalf("start contour = %.6f, want 1.0", start)
+	}
+	if peak <= 1.05 || peak >= 1.15 {
+		t.Fatalf("peak contour = %.6f, want subtle 5-15%% lift", peak)
+	}
+	if tail <= 1.0 || tail >= peak {
+		t.Fatalf("tail contour = %.6f, want a long release between 1.0 and peak %.6f", tail, peak)
+	}
+}
+
+func TestHighCognitiveLoadPresetReducesMotionProfile(t *testing.T) {
+	medium := focusPresetProfile(FocusPresetMedium)
+	high := focusPresetProfile(FocusPresetHigh)
+	cognitive := focusPresetProfile(FocusPresetHighCognitiveLoad)
+
+	if cognitive.textureMix != 0 {
+		t.Fatalf("cognitive texture mix = %.6f, want 0", cognitive.textureMix)
+	}
+	if cognitive.bedMix >= medium.bedMix {
+		t.Fatalf("cognitive bed mix = %.6f, want < medium bed mix %.6f", cognitive.bedMix, medium.bedMix)
+	}
+	if cognitive.pulseDepth < 0.05 || cognitive.pulseDepth > 0.15 {
+		t.Fatalf("cognitive pulse depth = %.6f, want within 5-15%%", cognitive.pulseDepth)
+	}
+	if high.pulseDepth < medium.pulseDepth {
+		t.Fatalf("high pulse depth = %.6f, want >= medium pulse depth %.6f", high.pulseDepth, medium.pulseDepth)
 	}
 }
 
@@ -259,7 +306,7 @@ func steadyStateGain(shaper SpeechShaper, frequencyHz float64) float64 {
 	return math.Sqrt(outputEnergy / inputEnergy)
 }
 
-func focusRMS(density Density) float64 {
+func focusRMS(preset FocusPreset) float64 {
 	rng := xorShift32{x: 0x12345678}
 	state := NewFocusState()
 	sampleCount := config.SampleRate * 3
@@ -269,13 +316,52 @@ func focusRMS(density Density) float64 {
 	var counted int
 
 	for i := 0; i < sampleCount; i++ {
-		left, right := state.NextPair(&rng, density)
+		left, right := state.NextPair(&rng, preset)
 		if i < settleSamples {
 			continue
 		}
 
 		energy += float64(left*left + right*right)
 		counted += 2
+	}
+
+	return math.Sqrt(energy / float64(counted))
+}
+
+func focusMotionEnergy(preset FocusPreset) float64 {
+	rng := xorShift32{x: 0x12345678}
+	state := NewFocusState()
+	sampleCount := config.SampleRate * 3
+	settleSamples := config.SampleRate / 2
+
+	var energy float64
+	var counted int
+	var prevLeft float32
+	var prevRight float32
+	var havePrevious bool
+
+	for i := 0; i < sampleCount; i++ {
+		left, right := state.NextPair(&rng, preset)
+		if i < settleSamples {
+			prevLeft = left
+			prevRight = right
+			havePrevious = true
+			continue
+		}
+		if !havePrevious {
+			prevLeft = left
+			prevRight = right
+			havePrevious = true
+			continue
+		}
+
+		deltaLeft := left - prevLeft
+		deltaRight := right - prevRight
+		energy += float64(deltaLeft*deltaLeft + deltaRight*deltaRight)
+		counted += 2
+
+		prevLeft = left
+		prevRight = right
 	}
 
 	return math.Sqrt(energy / float64(counted))
