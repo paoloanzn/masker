@@ -52,6 +52,18 @@ func TestModeGainCompensationOrdering(t *testing.T) {
 	}
 }
 
+func TestModeGainCompensationValues(t *testing.T) {
+	if got := modeGain(ModeBrown); got != 4.10 {
+		t.Fatalf("brown gain = %.2f, want 4.10", got)
+	}
+	if got := modeGain(ModePink); got != 1.00 {
+		t.Fatalf("pink gain = %.2f, want 1.00", got)
+	}
+	if got := modeGain(ModeSpeech); got != 0.24 {
+		t.Fatalf("speech gain = %.2f, want 0.24", got)
+	}
+}
+
 func TestFillWritesStereoSamples(t *testing.T) {
 	generator := NewGenerator()
 	samples := make([]float32, 16)
