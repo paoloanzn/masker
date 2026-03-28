@@ -12,7 +12,7 @@ type Mode int32
 const (
 	ModeBrown Mode = iota
 	ModePink
-	ModeVoice
+	ModeSpeech
 )
 
 func (m Mode) String() string {
@@ -21,8 +21,8 @@ func (m Mode) String() string {
 		return "Brown"
 	case ModePink:
 		return "Pink"
-	case ModeVoice:
-		return "Voice-focused"
+	case ModeSpeech:
+		return "Speech-shaped"
 	default:
 		return "Unknown"
 	}
@@ -40,20 +40,16 @@ type Generator struct {
 	pinkL PinkState
 	pinkR PinkState
 
-	voiceHPL OnePoleHP
-	voiceHPR OnePoleHP
-	voiceLPL OnePoleLP
-	voiceLPR OnePoleLP
+	speechL SpeechShaper
+	speechR SpeechShaper
 }
 
 func NewGenerator() *Generator {
 	generator := &Generator{
 		rng: xorShift32{x: 0x12345678},
 
-		voiceHPL: NewOnePoleHP(700),
-		voiceHPR: NewOnePoleHP(700),
-		voiceLPL: NewOnePoleLP(3500),
-		voiceLPR: NewOnePoleLP(3500),
+		speechL: NewSpeechShaper(),
+		speechR: NewSpeechShaper(),
 	}
 	generator.SetMode(ModeBrown)
 	generator.SetVolume(config.DefaultVolume)
@@ -93,8 +89,8 @@ func (g *Generator) Fill(samples []float32) {
 			left, right = g.nextBrownPair()
 		case ModePink:
 			left, right = g.nextPinkPair()
-		case ModeVoice:
-			left, right = g.nextVoicePair()
+		case ModeSpeech:
+			left, right = g.nextSpeechPair()
 		default:
 			left, right = g.nextBrownPair()
 		}
@@ -120,20 +116,14 @@ func (g *Generator) nextPinkPair() (float32, float32) {
 	return clamp(g.pinkL.Next(whiteL)), clamp(g.pinkR.Next(whiteR))
 }
 
-func (g *Generator) nextVoicePair() (float32, float32) {
+func (g *Generator) nextSpeechPair() (float32, float32) {
 	whiteL := g.rng.nextFloat32()
 	whiteR := g.rng.nextFloat32()
 
-	left := g.pinkL.Next(whiteL)
-	right := g.pinkR.Next(whiteR)
+	left := g.speechL.Process(whiteL)
+	right := g.speechR.Process(whiteR)
 
-	left = g.voiceHPL.Process(left)
-	right = g.voiceHPR.Process(right)
-
-	left = g.voiceLPL.Process(left)
-	right = g.voiceLPR.Process(right)
-
-	return clamp(1.8 * left), clamp(1.8 * right)
+	return clamp(1.35 * left), clamp(1.35 * right)
 }
 
 type xorShift32 struct {
@@ -171,6 +161,58 @@ func (p *PinkState) Next(white float32) float32 {
 	pink := p.b0 + p.b1 + p.b2 + p.b3 + p.b4 + p.b5 + p.b6 + 0.5362*white
 	p.b6 = 0.115926 * white
 	return 0.11 * pink
+}
+
+type SpeechBand struct {
+	gain  float32
+	hasHP bool
+	hp    OnePoleHP
+	lp    OnePoleLP
+}
+
+func NewSpeechBand(lowCutHz, highCutHz, gain float32) SpeechBand {
+	band := SpeechBand{
+		gain: gain,
+		lp:   NewOnePoleLP(highCutHz),
+	}
+	if lowCutHz > 0 {
+		band.hasHP = true
+		band.hp = NewOnePoleHP(lowCutHz)
+	}
+	return band
+}
+
+func (b *SpeechBand) Process(sample float32) float32 {
+	if b.hasHP {
+		sample = b.hp.Process(sample)
+	}
+	return b.gain * b.lp.Process(sample)
+}
+
+type SpeechShaper struct {
+	bands [6]SpeechBand
+}
+
+func NewSpeechShaper() SpeechShaper {
+	// Approximate a long-term average speech spectrum with broad octave bands.
+	return SpeechShaper{
+		bands: [6]SpeechBand{
+			NewSpeechBand(125, 250, 0.18),
+			NewSpeechBand(250, 500, 0.40),
+			NewSpeechBand(500, 1000, 0.85),
+			NewSpeechBand(1000, 2000, 1.00),
+			NewSpeechBand(2000, 4000, 0.63),
+			NewSpeechBand(4000, 8000, 0.28),
+		},
+	}
+}
+
+func (s *SpeechShaper) Process(sample float32) float32 {
+	var shaped float32
+	for i := range s.bands {
+		shaped += s.bands[i].Process(sample)
+	}
+	return shaped
 }
 
 type OnePoleHP struct {
