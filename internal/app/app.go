@@ -25,6 +25,7 @@ func New() *App {
 }
 
 func Run() error {
+	preparePlatform()
 	maskerApp := New()
 	systray.Run(maskerApp.onReady, maskerApp.onExit)
 	return nil
@@ -32,8 +33,8 @@ func Run() error {
 
 func (a *App) onReady() {
 	systray.SetTemplateIcon(trayIcon, trayIcon)
-	systray.SetTitle("Mask")
-	systray.SetTooltip("Noise masking")
+	systray.SetTitle("")
+	systray.SetTooltip("Masker noise masking")
 
 	if err := a.engine.Start(); err != nil {
 		log.Fatalf("start audio engine: %v", err)
