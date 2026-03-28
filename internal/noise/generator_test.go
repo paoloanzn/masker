@@ -12,6 +12,7 @@ func TestModeString(t *testing.T) {
 		mode Mode
 		want string
 	}{
+		{mode: ModeFocus, want: "Focus"},
 		{mode: ModeBrown, want: "Brown"},
 		{mode: ModePink, want: "Pink"},
 		{mode: ModeSpeech, want: "Speech-shaped"},
@@ -32,10 +33,11 @@ func TestModeCycle(t *testing.T) {
 		next     Mode
 		previous Mode
 	}{
-		{name: "brown wraps", start: ModeBrown, next: ModePink, previous: ModeSpeech},
+		{name: "focus wraps", start: ModeFocus, next: ModeBrown, previous: ModeSpeech},
+		{name: "brown wraps", start: ModeBrown, next: ModePink, previous: ModeFocus},
 		{name: "pink wraps", start: ModePink, next: ModeSpeech, previous: ModeBrown},
-		{name: "speech wraps", start: ModeSpeech, next: ModeBrown, previous: ModePink},
-		{name: "unknown falls back", start: Mode(99), next: ModeBrown, previous: ModeBrown},
+		{name: "speech wraps", start: ModeSpeech, next: ModeFocus, previous: ModePink},
+		{name: "unknown falls back", start: Mode(99), next: ModeFocus, previous: ModeFocus},
 	}
 
 	for _, test := range tests {
@@ -62,6 +64,44 @@ func TestSetVolumeClampsToConfiguredRange(t *testing.T) {
 	}
 }
 
+func TestDefaultFocusModeAndDensity(t *testing.T) {
+	generator := NewGenerator()
+
+	if got := generator.Mode(); got != ModeFocus {
+		t.Fatalf("default mode = %v, want %v", got, ModeFocus)
+	}
+	if got := generator.Density(); got != DensityMedium {
+		t.Fatalf("default density = %v, want %v", got, DensityMedium)
+	}
+}
+
+func TestDensityCycle(t *testing.T) {
+	tests := []struct {
+		name     string
+		start    Density
+		next     Density
+		previous Density
+		want     string
+	}{
+		{name: "low wraps", start: DensityLow, next: DensityMedium, previous: DensityHigh, want: "Low"},
+		{name: "medium wraps", start: DensityMedium, next: DensityHigh, previous: DensityLow, want: "Medium"},
+		{name: "high wraps", start: DensityHigh, next: DensityLow, previous: DensityMedium, want: "High"},
+		{name: "unknown falls back", start: Density(99), next: DensityMedium, previous: DensityMedium, want: "Unknown"},
+	}
+
+	for _, test := range tests {
+		if got := test.start.Next(); got != test.next {
+			t.Fatalf("%s next = %v, want %v", test.name, got, test.next)
+		}
+		if got := test.start.Previous(); got != test.previous {
+			t.Fatalf("%s previous = %v, want %v", test.name, got, test.previous)
+		}
+		if got := test.start.String(); got != test.want {
+			t.Fatalf("%s string = %q, want %q", test.name, got, test.want)
+		}
+	}
+}
+
 func TestPausedState(t *testing.T) {
 	generator := NewGenerator()
 
@@ -82,9 +122,16 @@ func TestPausedState(t *testing.T) {
 
 func TestModeGainCompensationOrdering(t *testing.T) {
 	brown := modeGain(ModeBrown)
+	focus := modeGain(ModeFocus)
 	pink := modeGain(ModePink)
 	speech := modeGain(ModeSpeech)
 
+	if !(brown > focus) {
+		t.Fatalf("brown gain = %.2f, want > focus gain %.2f", brown, focus)
+	}
+	if !(focus > pink) {
+		t.Fatalf("focus gain = %.2f, want > pink gain %.2f", focus, pink)
+	}
 	if !(brown > pink) {
 		t.Fatalf("brown gain = %.2f, want > pink gain %.2f", brown, pink)
 	}
@@ -94,6 +141,9 @@ func TestModeGainCompensationOrdering(t *testing.T) {
 }
 
 func TestModeGainCompensationValues(t *testing.T) {
+	if got := modeGain(ModeFocus); got != 1.80 {
+		t.Fatalf("focus gain = %.2f, want 1.80", got)
+	}
 	if got := modeGain(ModeBrown); got != 4.10 {
 		t.Fatalf("brown gain = %.2f, want 4.10", got)
 	}
@@ -102,6 +152,19 @@ func TestModeGainCompensationValues(t *testing.T) {
 	}
 	if got := modeGain(ModeSpeech); got != 0.24 {
 		t.Fatalf("speech gain = %.2f, want 0.24", got)
+	}
+}
+
+func TestFocusDensityAddsLayers(t *testing.T) {
+	low := focusRMS(DensityLow)
+	medium := focusRMS(DensityMedium)
+	high := focusRMS(DensityHigh)
+
+	if !(medium > low) {
+		t.Fatalf("medium rms = %.6f, want > low rms %.6f", medium, low)
+	}
+	if !(high > medium) {
+		t.Fatalf("high rms = %.6f, want > medium rms %.6f", high, medium)
 	}
 }
 
@@ -172,4 +235,26 @@ func steadyStateGain(shaper SpeechShaper, frequencyHz float64) float64 {
 	}
 
 	return math.Sqrt(outputEnergy / inputEnergy)
+}
+
+func focusRMS(density Density) float64 {
+	rng := xorShift32{x: 0x12345678}
+	state := NewFocusState()
+	sampleCount := config.SampleRate * 3
+	settleSamples := config.SampleRate / 2
+
+	var energy float64
+	var counted int
+
+	for i := 0; i < sampleCount; i++ {
+		left, right := state.NextPair(&rng, density)
+		if i < settleSamples {
+			continue
+		}
+
+		energy += float64(left*left + right*right)
+		counted += 2
+	}
+
+	return math.Sqrt(energy / float64(counted))
 }
