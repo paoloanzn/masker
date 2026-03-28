@@ -15,46 +15,31 @@ enum {
 
 extern void maskerHandleTrackCommand(int keyType);
 
-static id maskerMediaKeyMonitor = nil;
+@interface MaskerApplication : NSApplication
+@end
 
-static void prepareMaskerApp(void) {
-	[NSApplication sharedApplication];
-	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-}
+@implementation MaskerApplication
 
-static void installMaskerMediaKeyMonitor(void) {
-	if (maskerMediaKeyMonitor != nil) {
-		return;
-	}
-
-	maskerMediaKeyMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskSystemDefined handler:^NSEvent * _Nullable(NSEvent *event) {
-		if (![NSApp isActive] || [event subtype] != maskerMediaKeySubtype) {
-			return event;
-		}
-
+- (void)sendEvent:(NSEvent *)event {
+	if ([self isActive] && [event type] == NSEventTypeSystemDefined && [event subtype] == maskerMediaKeySubtype) {
 		NSInteger data1 = [event data1];
 		int keyType = (int)((data1 & 0xFFFF0000) >> 16);
 		int keyState = (int)((data1 & 0x0000FF00) >> 8);
-		if (keyState != maskerMediaKeyDown) {
-			return event;
-		}
-
-		if (keyType == maskerKeyTypeNextTrack || keyType == maskerKeyTypePreviousTrack) {
+		if (keyState == maskerMediaKeyDown &&
+			(keyType == maskerKeyTypeNextTrack || keyType == maskerKeyTypePreviousTrack)) {
 			maskerHandleTrackCommand(keyType);
-			return nil;
+			return;
 		}
-
-		return event;
-	}];
-}
-
-static void clearMaskerMediaKeyMonitor(void) {
-	if (maskerMediaKeyMonitor == nil) {
-		return;
 	}
 
-	[NSEvent removeMonitor:maskerMediaKeyMonitor];
-	maskerMediaKeyMonitor = nil;
+	[super sendEvent:event];
+}
+
+@end
+
+static void prepareMaskerApp(void) {
+	[MaskerApplication sharedApplication];
+	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 }
 */
 import "C"
@@ -69,11 +54,9 @@ var previousTrackHandler func()
 func installTrackCommandHandlers(next, previous func()) {
 	nextTrackHandler = next
 	previousTrackHandler = previous
-	C.installMaskerMediaKeyMonitor()
 }
 
 func clearTrackCommandHandlers() {
 	nextTrackHandler = nil
 	previousTrackHandler = nil
-	C.clearMaskerMediaKeyMonitor()
 }
