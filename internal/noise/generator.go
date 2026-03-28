@@ -204,8 +204,8 @@ func (g *Generator) Fill(samples []float32) {
 	}
 
 	mode := g.Mode()
-	volume := g.Volume() * modeGain(mode)
 	adhdPreset := g.ADHDPreset()
+	volume := g.Volume() * outputGain(mode, adhdPreset)
 	focusPreset := g.FocusPreset()
 
 	for i := 0; i < len(samples); i += 2 {
@@ -230,12 +230,17 @@ func (g *Generator) Fill(samples []float32) {
 	}
 }
 
+func outputGain(mode Mode, adhdPreset ADHDPreset) float32 {
+	if mode == ModeADHD {
+		return adhdPresetGain(adhdPreset)
+	}
+	return modeGain(mode)
+}
+
 func modeGain(mode Mode) float32 {
 	switch mode {
 	case ModeFocus:
 		return 1.80
-	case ModeADHD:
-		return 0.55
 	case ModeBrown:
 		// Calibrated against hearing-weighted measurements so mode switches are less jarring.
 		return 4.10
@@ -245,6 +250,19 @@ func modeGain(mode Mode) float32 {
 		return 0.24
 	default:
 		return 1.00
+	}
+}
+
+func adhdPresetGain(preset ADHDPreset) float32 {
+	switch preset {
+	case ADHDPresetWhite:
+		// White noise is compensated down to offset its brighter perceived intensity.
+		return 0.42
+	case ADHDPresetPink:
+		// Match the standard pink mode calibration so switching between them is not jarring.
+		return modeGain(ModePink)
+	default:
+		return 0.42
 	}
 }
 

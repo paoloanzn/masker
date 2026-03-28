@@ -152,15 +152,16 @@ func TestPausedState(t *testing.T) {
 func TestModeGainCompensationOrdering(t *testing.T) {
 	brown := modeGain(ModeBrown)
 	focus := modeGain(ModeFocus)
-	adhd := modeGain(ModeADHD)
+	adhdWhite := adhdPresetGain(ADHDPresetWhite)
+	adhdPink := adhdPresetGain(ADHDPresetPink)
 	pink := modeGain(ModePink)
 	speech := modeGain(ModeSpeech)
 
 	if !(brown > focus) {
 		t.Fatalf("brown gain = %.2f, want > focus gain %.2f", brown, focus)
 	}
-	if !(focus > adhd) {
-		t.Fatalf("focus gain = %.2f, want > adhd gain %.2f", focus, adhd)
+	if !(focus > adhdPink) {
+		t.Fatalf("focus gain = %.2f, want > adhd pink gain %.2f", focus, adhdPink)
 	}
 	if !(focus > pink) {
 		t.Fatalf("focus gain = %.2f, want > pink gain %.2f", focus, pink)
@@ -168,8 +169,11 @@ func TestModeGainCompensationOrdering(t *testing.T) {
 	if !(brown > pink) {
 		t.Fatalf("brown gain = %.2f, want > pink gain %.2f", brown, pink)
 	}
-	if !(adhd > speech) {
-		t.Fatalf("adhd gain = %.2f, want > speech gain %.2f", adhd, speech)
+	if !(adhdPink > adhdWhite) {
+		t.Fatalf("adhd pink gain = %.2f, want > adhd white gain %.2f", adhdPink, adhdWhite)
+	}
+	if !(adhdWhite > speech) {
+		t.Fatalf("adhd white gain = %.2f, want > speech gain %.2f", adhdWhite, speech)
 	}
 	if !(pink > speech) {
 		t.Fatalf("pink gain = %.2f, want > speech gain %.2f", pink, speech)
@@ -180,9 +184,6 @@ func TestModeGainCompensationValues(t *testing.T) {
 	if got := modeGain(ModeFocus); got != 1.80 {
 		t.Fatalf("focus gain = %.2f, want 1.80", got)
 	}
-	if got := modeGain(ModeADHD); got != 0.55 {
-		t.Fatalf("adhd gain = %.2f, want 0.55", got)
-	}
 	if got := modeGain(ModeBrown); got != 4.10 {
 		t.Fatalf("brown gain = %.2f, want 4.10", got)
 	}
@@ -191,6 +192,18 @@ func TestModeGainCompensationValues(t *testing.T) {
 	}
 	if got := modeGain(ModeSpeech); got != 0.24 {
 		t.Fatalf("speech gain = %.2f, want 0.24", got)
+	}
+	if got := adhdPresetGain(ADHDPresetWhite); got != 0.42 {
+		t.Fatalf("adhd white gain = %.2f, want 0.42", got)
+	}
+	if got := adhdPresetGain(ADHDPresetPink); got != 1.00 {
+		t.Fatalf("adhd pink gain = %.2f, want 1.00", got)
+	}
+}
+
+func TestADHDPinkGainMatchesStandardPink(t *testing.T) {
+	if got, want := adhdPresetGain(ADHDPresetPink), modeGain(ModePink); got != want {
+		t.Fatalf("adhd pink gain = %.2f, want standard pink gain %.2f", got, want)
 	}
 }
 
