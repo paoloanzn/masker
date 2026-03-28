@@ -62,6 +62,24 @@ func TestSetVolumeClampsToConfiguredRange(t *testing.T) {
 	}
 }
 
+func TestPausedState(t *testing.T) {
+	generator := NewGenerator()
+
+	if generator.Paused() {
+		t.Fatal("generator starts paused, want playing")
+	}
+
+	generator.SetPaused(true)
+	if !generator.Paused() {
+		t.Fatal("generator paused state = false, want true")
+	}
+
+	generator.TogglePaused()
+	if generator.Paused() {
+		t.Fatal("generator paused state = true after toggle, want false")
+	}
+}
+
 func TestModeGainCompensationOrdering(t *testing.T) {
 	brown := modeGain(ModeBrown)
 	pink := modeGain(ModePink)
@@ -99,6 +117,23 @@ func TestFillWritesStereoSamples(t *testing.T) {
 		}
 		if samples[i+1] < -config.MaxVolume || samples[i+1] > config.MaxVolume {
 			t.Fatalf("right sample %d out of range: %f", i+1, samples[i+1])
+		}
+	}
+}
+
+func TestFillWritesSilenceWhenPaused(t *testing.T) {
+	generator := NewGenerator()
+	samples := make([]float32, 16)
+	for i := range samples {
+		samples[i] = 1
+	}
+
+	generator.SetPaused(true)
+	generator.Fill(samples)
+
+	for i, sample := range samples {
+		if sample != 0 {
+			t.Fatalf("sample %d = %f, want 0", i, sample)
 		}
 	}
 }

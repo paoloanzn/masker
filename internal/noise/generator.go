@@ -58,6 +58,7 @@ type Generator struct {
 	rng xorShift32
 
 	modeBits   atomic.Int32
+	pausedBits atomic.Bool
 	volumeBits atomic.Uint32
 
 	brownL float32
@@ -90,6 +91,18 @@ func (g *Generator) SetMode(mode Mode) {
 	g.modeBits.Store(int32(mode))
 }
 
+func (g *Generator) Paused() bool {
+	return g.pausedBits.Load()
+}
+
+func (g *Generator) SetPaused(paused bool) {
+	g.pausedBits.Store(paused)
+}
+
+func (g *Generator) TogglePaused() {
+	g.pausedBits.Store(!g.Paused())
+}
+
 func (g *Generator) Volume() float32 {
 	return math.Float32frombits(g.volumeBits.Load())
 }
@@ -105,6 +118,11 @@ func (g *Generator) SetVolume(volume float32) {
 }
 
 func (g *Generator) Fill(samples []float32) {
+	if g.Paused() {
+		clear(samples)
+		return
+	}
+
 	mode := g.Mode()
 	volume := g.Volume() * modeGain(mode)
 

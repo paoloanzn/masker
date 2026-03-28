@@ -4,8 +4,8 @@ package app
 
 func preparePlatform() {}
 
-func installTrackCommandHandlers(_, _ func()) {}
+func installTrackCommandHandlers(_, _, _, _, _ func()) {}
 
 func clearTrackCommandHandlers() {}
 
-func updateTrackCommandMode(string) {}
+func updateTrackCommandState(string, bool) {}

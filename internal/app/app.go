@@ -63,7 +63,7 @@ func (a *App) onReady() {
 	quit := systray.AddMenuItem("Quit", "Quit the app")
 
 	a.syncUI()
-	installTrackCommandHandlers(a.nextMode, a.previousMode)
+	installTrackCommandHandlers(a.nextMode, a.previousMode, a.play, a.pause, a.togglePlayPause)
 
 	go func() {
 		for {
@@ -116,7 +116,7 @@ func (a *App) syncUI() {
 	if a.status != nil {
 		a.status.SetTitle(a.statusText())
 	}
-	updateTrackCommandMode(a.generator.Mode().String())
+	updateTrackCommandState(a.generator.Mode().String(), a.generator.Paused())
 }
 
 func (a *App) nextMode() {
@@ -129,6 +129,25 @@ func (a *App) previousMode() {
 	a.syncUI()
 }
 
+func (a *App) play() {
+	a.generator.SetPaused(false)
+	a.syncUI()
+}
+
+func (a *App) pause() {
+	a.generator.SetPaused(true)
+	a.syncUI()
+}
+
+func (a *App) togglePlayPause() {
+	a.generator.TogglePaused()
+	a.syncUI()
+}
+
 func (a *App) statusText() string {
-	return fmt.Sprintf("Mode: %s | Vol: %.3f", a.generator.Mode(), a.generator.Volume())
+	state := "Playing"
+	if a.generator.Paused() {
+		state = "Paused"
+	}
+	return fmt.Sprintf("%s | Mode: %s | Vol: %.3f", state, a.generator.Mode(), a.generator.Volume())
 }
