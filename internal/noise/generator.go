@@ -10,13 +10,16 @@ import (
 type Mode int32
 
 const (
-	ModeBrown Mode = iota
+	ModeFocus Mode = iota
+	ModeBrown
 	ModePink
 	ModeSpeech
 )
 
 func (m Mode) String() string {
 	switch m {
+	case ModeFocus:
+		return "Focus"
 	case ModeBrown:
 		return "Brown"
 	case ModePink:
@@ -30,36 +33,41 @@ func (m Mode) String() string {
 
 func (m Mode) Next() Mode {
 	switch m {
+	case ModeFocus:
+		return ModeBrown
 	case ModeBrown:
 		return ModePink
 	case ModePink:
 		return ModeSpeech
 	case ModeSpeech:
-		return ModeBrown
+		return ModeFocus
 	default:
-		return ModeBrown
+		return ModeFocus
 	}
 }
 
 func (m Mode) Previous() Mode {
 	switch m {
-	case ModeBrown:
+	case ModeFocus:
 		return ModeSpeech
+	case ModeBrown:
+		return ModeFocus
 	case ModePink:
 		return ModeBrown
 	case ModeSpeech:
 		return ModePink
 	default:
-		return ModeBrown
+		return ModeFocus
 	}
 }
 
 type Generator struct {
 	rng xorShift32
 
-	modeBits   atomic.Int32
-	pausedBits atomic.Bool
-	volumeBits atomic.Uint32
+	modeBits    atomic.Int32
+	densityBits atomic.Int32
+	pausedBits  atomic.Bool
+	volumeBits  atomic.Uint32
 
 	brownL float32
 	brownR float32
@@ -69,6 +77,8 @@ type Generator struct {
 
 	speechL SpeechShaper
 	speechR SpeechShaper
+
+	focus FocusState
 }
 
 func NewGenerator() *Generator {
@@ -77,8 +87,10 @@ func NewGenerator() *Generator {
 
 		speechL: NewSpeechShaper(),
 		speechR: NewSpeechShaper(),
+		focus:   NewFocusState(),
 	}
-	generator.SetMode(ModeBrown)
+	generator.SetMode(ModeFocus)
+	generator.SetDensity(DensityMedium)
 	generator.SetVolume(config.DefaultVolume)
 	return generator
 }
@@ -89,6 +101,19 @@ func (g *Generator) Mode() Mode {
 
 func (g *Generator) SetMode(mode Mode) {
 	g.modeBits.Store(int32(mode))
+}
+
+func (g *Generator) Density() Density {
+	return Density(g.densityBits.Load())
+}
+
+func (g *Generator) SetDensity(density Density) {
+	switch density {
+	case DensityLow, DensityMedium, DensityHigh:
+		g.densityBits.Store(int32(density))
+	default:
+		g.densityBits.Store(int32(DensityMedium))
+	}
 }
 
 func (g *Generator) Paused() bool {
@@ -125,10 +150,13 @@ func (g *Generator) Fill(samples []float32) {
 
 	mode := g.Mode()
 	volume := g.Volume() * modeGain(mode)
+	density := g.Density()
 
 	for i := 0; i < len(samples); i += 2 {
 		var left, right float32
 		switch mode {
+		case ModeFocus:
+			left, right = g.focus.NextPair(&g.rng, density)
 		case ModeBrown:
 			left, right = g.nextBrownPair()
 		case ModePink:
@@ -146,6 +174,8 @@ func (g *Generator) Fill(samples []float32) {
 
 func modeGain(mode Mode) float32 {
 	switch mode {
+	case ModeFocus:
+		return 1.80
 	case ModeBrown:
 		// Calibrated against hearing-weighted measurements so mode switches are less jarring.
 		return 4.10
