@@ -9,3 +9,7 @@ func installTrackCommandHandlers(_, _, _, _, _ func()) {}
 func clearTrackCommandHandlers() {}
 
 func updateTrackCommandState(string, bool) {}
+
+func askADHDGateQuestion() (bool, error) {
+	return false, nil
+}
