@@ -25,6 +25,29 @@ func TestModeString(t *testing.T) {
 	}
 }
 
+func TestModeCycle(t *testing.T) {
+	tests := []struct {
+		name     string
+		start    Mode
+		next     Mode
+		previous Mode
+	}{
+		{name: "brown wraps", start: ModeBrown, next: ModePink, previous: ModeSpeech},
+		{name: "pink wraps", start: ModePink, next: ModeSpeech, previous: ModeBrown},
+		{name: "speech wraps", start: ModeSpeech, next: ModeBrown, previous: ModePink},
+		{name: "unknown falls back", start: Mode(99), next: ModeBrown, previous: ModeBrown},
+	}
+
+	for _, test := range tests {
+		if got := test.start.Next(); got != test.next {
+			t.Fatalf("%s next = %v, want %v", test.name, got, test.next)
+		}
+		if got := test.start.Previous(); got != test.previous {
+			t.Fatalf("%s previous = %v, want %v", test.name, got, test.previous)
+		}
+	}
+}
+
 func TestSetVolumeClampsToConfiguredRange(t *testing.T) {
 	generator := NewGenerator()
 

@@ -14,6 +14,10 @@ import (
 type App struct {
 	engine    *audio.Engine
 	generator *noise.Generator
+	status    *systray.MenuItem
+	brown     *systray.MenuItem
+	pink      *systray.MenuItem
+	speech    *systray.MenuItem
 }
 
 func New() *App {
@@ -40,14 +44,14 @@ func (a *App) onReady() {
 		log.Fatalf("start audio engine: %v", err)
 	}
 
-	status := systray.AddMenuItem(a.statusText(), "Current masking status")
-	status.Disable()
+	a.status = systray.AddMenuItem(a.statusText(), "Current masking status")
+	a.status.Disable()
 
 	systray.AddSeparator()
 
-	brown := systray.AddMenuItemCheckbox("Brown", "Low rumble / HVAC / travel", true)
-	pink := systray.AddMenuItemCheckbox("Pink", "General ambient masking", false)
-	speech := systray.AddMenuItemCheckbox("Speech-shaped", "Target the speech band more directly", false)
+	a.brown = systray.AddMenuItemCheckbox("Brown", "Low rumble / HVAC / travel", true)
+	a.pink = systray.AddMenuItemCheckbox("Pink", "General ambient masking", false)
+	a.speech = systray.AddMenuItemCheckbox("Speech-shaped", "Target the speech band more directly", false)
 
 	systray.AddSeparator()
 
@@ -58,16 +62,17 @@ func (a *App) onReady() {
 
 	quit := systray.AddMenuItem("Quit", "Quit the app")
 
-	a.updateChecks(brown, pink, speech)
+	a.syncUI()
+	installTrackCommandHandlers(a.nextMode, a.previousMode)
 
 	go func() {
 		for {
 			select {
-			case <-brown.ClickedCh:
+			case <-a.brown.ClickedCh:
 				a.generator.SetMode(noise.ModeBrown)
-			case <-pink.ClickedCh:
+			case <-a.pink.ClickedCh:
 				a.generator.SetMode(noise.ModePink)
-			case <-speech.ClickedCh:
+			case <-a.speech.ClickedCh:
 				a.generator.SetMode(noise.ModeSpeech)
 			case <-volumeUp.ClickedCh:
 				a.generator.SetVolume(a.generator.Volume() + config.VolumeStep)
@@ -78,30 +83,49 @@ func (a *App) onReady() {
 				return
 			}
 
-			a.updateChecks(brown, pink, speech)
-			status.SetTitle(a.statusText())
+			a.syncUI()
 		}
 	}()
 }
 
 func (a *App) onExit() {
+	clearTrackCommandHandlers()
 	a.engine.Stop()
 }
 
-func (a *App) updateChecks(brown, pink, speech *systray.MenuItem) {
+func (a *App) updateChecks() {
 	mode := a.generator.Mode()
-	brown.Uncheck()
-	pink.Uncheck()
-	speech.Uncheck()
+	a.brown.Uncheck()
+	a.pink.Uncheck()
+	a.speech.Uncheck()
 
 	switch mode {
 	case noise.ModeBrown:
-		brown.Check()
+		a.brown.Check()
 	case noise.ModePink:
-		pink.Check()
+		a.pink.Check()
 	case noise.ModeSpeech:
-		speech.Check()
+		a.speech.Check()
 	}
+}
+
+func (a *App) syncUI() {
+	if a.brown != nil && a.pink != nil && a.speech != nil {
+		a.updateChecks()
+	}
+	if a.status != nil {
+		a.status.SetTitle(a.statusText())
+	}
+}
+
+func (a *App) nextMode() {
+	a.generator.SetMode(a.generator.Mode().Next())
+	a.syncUI()
+}
+
+func (a *App) previousMode() {
+	a.generator.SetMode(a.generator.Mode().Previous())
+	a.syncUI()
 }
 
 func (a *App) statusText() string {

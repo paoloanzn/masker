@@ -3,3 +3,7 @@
 package app
 
 func preparePlatform() {}
+
+func installTrackCommandHandlers(_, _ func()) {}
+
+func clearTrackCommandHandlers() {}

@@ -28,6 +28,32 @@ func (m Mode) String() string {
 	}
 }
 
+func (m Mode) Next() Mode {
+	switch m {
+	case ModeBrown:
+		return ModePink
+	case ModePink:
+		return ModeSpeech
+	case ModeSpeech:
+		return ModeBrown
+	default:
+		return ModeBrown
+	}
+}
+
+func (m Mode) Previous() Mode {
+	switch m {
+	case ModeBrown:
+		return ModeSpeech
+	case ModePink:
+		return ModeBrown
+	case ModeSpeech:
+		return ModePink
+	default:
+		return ModeBrown
+	}
+}
+
 type Generator struct {
 	rng xorShift32
 
