@@ -79,8 +79,8 @@ func (g *Generator) SetVolume(volume float32) {
 }
 
 func (g *Generator) Fill(samples []float32) {
-	volume := g.Volume()
 	mode := g.Mode()
+	volume := g.Volume() * modeGain(mode)
 
 	for i := 0; i < len(samples); i += 2 {
 		var left, right float32
@@ -97,6 +97,19 @@ func (g *Generator) Fill(samples []float32) {
 
 		samples[i] = volume * left
 		samples[i+1] = volume * right
+	}
+}
+
+func modeGain(mode Mode) float32 {
+	switch mode {
+	case ModeBrown:
+		return 1.45
+	case ModePink:
+		return 1.00
+	case ModeSpeech:
+		return 0.62
+	default:
+		return 1.00
 	}
 }
 

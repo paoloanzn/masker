@@ -39,6 +39,19 @@ func TestSetVolumeClampsToConfiguredRange(t *testing.T) {
 	}
 }
 
+func TestModeGainCompensationOrdering(t *testing.T) {
+	brown := modeGain(ModeBrown)
+	pink := modeGain(ModePink)
+	speech := modeGain(ModeSpeech)
+
+	if !(brown > pink) {
+		t.Fatalf("brown gain = %.2f, want > pink gain %.2f", brown, pink)
+	}
+	if !(pink > speech) {
+		t.Fatalf("pink gain = %.2f, want > speech gain %.2f", pink, speech)
+	}
+}
+
 func TestFillWritesStereoSamples(t *testing.T) {
 	generator := NewGenerator()
 	samples := make([]float32, 16)
