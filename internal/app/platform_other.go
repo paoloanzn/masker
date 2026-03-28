@@ -7,3 +7,5 @@ func preparePlatform() {}
 func installTrackCommandHandlers(_, _ func()) {}
 
 func clearTrackCommandHandlers() {}
+
+func updateTrackCommandMode(string) {}

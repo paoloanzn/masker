@@ -116,6 +116,7 @@ func (a *App) syncUI() {
 	if a.status != nil {
 		a.status.SetTitle(a.statusText())
 	}
+	updateTrackCommandMode(a.generator.Mode().String())
 }
 
 func (a *App) nextMode() {
