@@ -1,11 +1,13 @@
 # Masker
 
-Masker is a small Go menu bar utility that plays continuous masking noise for open-plan work, travel, and other distracting environments.
+Masker is a small Go menu bar utility that plays continuous masking audio for open-plan work, travel, and other distracting environments.
 
 ## Features
 
 - Lives in the macOS menu bar with a minimal tray UI
-- Switch between brown, pink, and speech-shaped masking noise
+- Starts in a slow-beat focus mode with fixed-tempo instrumental audio
+- Adjust focus density without changing the macro-tempo
+- Switch between focus, brown, pink, and speech-shaped masking modes
 - Adjust volume without reopening the app
 - Detaches from the terminal by default when started from the command line
 
@@ -51,6 +53,12 @@ Masker will relaunch itself in the background by default so the shell prompt ret
 ```sh
 masker --foreground
 ```
+
+The default `Focus` mode uses a steady 4/4 slow beat with low-density, medium-density, and high-density variations:
+
+- `Low`: sparse pad plus soft kick pulse
+- `Medium`: adds a soft harmonic bed
+- `High`: adds subtle rhythmic texture while keeping the same tempo
 
 ## Development
 
