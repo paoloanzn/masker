@@ -116,14 +116,6 @@ static void updateMaskerNowPlayingInfo(const char *modeName, _Bool paused) {
 	}
 }
 
-static _Bool maskerAskADHDGate(void) {
-	NSAlert *alert = [[NSAlert alloc] init];
-	alert.messageText = @"Are you using this primarily for ADHD-like inattentive symptoms?";
-	alert.informativeText = @"If yes, Masker will start with a steady ADHD / attention mode using evidence-linked white noise at the lowest default level.";
-	[alert addButtonWithTitle:@"Yes"];
-	[alert addButtonWithTitle:@"No"];
-	return [alert runModal] == NSAlertFirstButtonReturn;
-}
 */
 import "C"
 
@@ -161,8 +153,4 @@ func updateTrackCommandState(mode string, paused bool) {
 	cMode := C.CString(mode)
 	defer C.free(unsafe.Pointer(cMode))
 	C.updateMaskerNowPlayingInfo(cMode, C._Bool(paused))
-}
-
-func askADHDGateQuestion() (bool, error) {
-	return bool(C.maskerAskADHDGate()), nil
 }

@@ -9,13 +9,11 @@ import (
 	"masker/internal/audio"
 	"masker/internal/config"
 	"masker/internal/noise"
-	"masker/internal/settings"
 )
 
 type App struct {
 	engine          *audio.Engine
 	generator       *noise.Generator
-	preferences     settings.Preferences
 	status          *systray.MenuItem
 	focus           *systray.MenuItem
 	adhd            *systray.MenuItem
@@ -32,14 +30,9 @@ type App struct {
 
 func New() *App {
 	generator := noise.NewGenerator()
-	preferences, err := settings.Load()
-	if err != nil {
-		log.Printf("load preferences: %v", err)
-	}
 	return &App{
-		engine:      audio.NewEngine(generator),
-		generator:   generator,
-		preferences: preferences,
+		engine:    audio.NewEngine(generator),
+		generator: generator,
 	}
 }
 
@@ -54,8 +47,6 @@ func (a *App) onReady() {
 	systray.SetIcon(trayIcon)
 	systray.SetTitle("")
 	systray.SetTooltip("Masker focus audio")
-
-	a.applyStartupRecommendation()
 
 	if err := a.engine.Start(); err != nil {
 		log.Fatalf("start audio engine: %v", err)
@@ -260,27 +251,4 @@ func (a *App) currentModeText() string {
 	default:
 		return mode
 	}
-}
-
-func (a *App) applyStartupRecommendation() {
-	if !a.preferences.AskedADHDGate {
-		useADHDMode, err := askADHDGateQuestion()
-		if err != nil {
-			log.Printf("ask ADHD gate question: %v", err)
-		} else {
-			a.preferences.AskedADHDGate = true
-			a.preferences.PrimaryForADHD = useADHDMode
-			if err := settings.Save(a.preferences); err != nil {
-				log.Printf("save preferences: %v", err)
-			}
-		}
-	}
-
-	if !a.preferences.PrimaryForADHD {
-		return
-	}
-
-	a.generator.SetMode(noise.ModeADHD)
-	a.generator.SetADHDPreset(noise.ADHDPresetWhite)
-	a.generator.SetVolume(config.ADHDStartingVolume)
 }
