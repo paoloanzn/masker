@@ -64,10 +64,10 @@ func (m Mode) Previous() Mode {
 type Generator struct {
 	rng xorShift32
 
-	modeBits    atomic.Int32
-	densityBits atomic.Int32
-	pausedBits  atomic.Bool
-	volumeBits  atomic.Uint32
+	modeBits        atomic.Int32
+	focusPresetBits atomic.Int32
+	pausedBits      atomic.Bool
+	volumeBits      atomic.Uint32
 
 	brownL float32
 	brownR float32
@@ -90,7 +90,7 @@ func NewGenerator() *Generator {
 		focus:   NewFocusState(),
 	}
 	generator.SetMode(ModeFocus)
-	generator.SetDensity(DensityMedium)
+	generator.SetFocusPreset(FocusPresetMedium)
 	generator.SetVolume(config.DefaultVolume)
 	return generator
 }
@@ -103,16 +103,16 @@ func (g *Generator) SetMode(mode Mode) {
 	g.modeBits.Store(int32(mode))
 }
 
-func (g *Generator) Density() Density {
-	return Density(g.densityBits.Load())
+func (g *Generator) FocusPreset() FocusPreset {
+	return FocusPreset(g.focusPresetBits.Load())
 }
 
-func (g *Generator) SetDensity(density Density) {
-	switch density {
-	case DensityLow, DensityMedium, DensityHigh:
-		g.densityBits.Store(int32(density))
+func (g *Generator) SetFocusPreset(preset FocusPreset) {
+	switch preset {
+	case FocusPresetLow, FocusPresetMedium, FocusPresetHigh, FocusPresetHighCognitiveLoad:
+		g.focusPresetBits.Store(int32(preset))
 	default:
-		g.densityBits.Store(int32(DensityMedium))
+		g.focusPresetBits.Store(int32(FocusPresetMedium))
 	}
 }
 
@@ -150,13 +150,13 @@ func (g *Generator) Fill(samples []float32) {
 
 	mode := g.Mode()
 	volume := g.Volume() * modeGain(mode)
-	density := g.Density()
+	focusPreset := g.FocusPreset()
 
 	for i := 0; i < len(samples); i += 2 {
 		var left, right float32
 		switch mode {
 		case ModeFocus:
-			left, right = g.focus.NextPair(&g.rng, density)
+			left, right = g.focus.NextPair(&g.rng, focusPreset)
 		case ModeBrown:
 			left, right = g.nextBrownPair()
 		case ModePink:

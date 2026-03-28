@@ -8,63 +8,73 @@ import (
 
 const focusTempoBPM = 72.0
 
-type Density int32
+type FocusPreset int32
 
 const (
-	DensityLow Density = iota
-	DensityMedium
-	DensityHigh
+	FocusPresetLow FocusPreset = iota
+	FocusPresetMedium
+	FocusPresetHigh
+	FocusPresetHighCognitiveLoad
 )
 
-func (d Density) String() string {
-	switch d {
-	case DensityLow:
+func (p FocusPreset) String() string {
+	switch p {
+	case FocusPresetLow:
 		return "Low"
-	case DensityMedium:
+	case FocusPresetMedium:
 		return "Medium"
-	case DensityHigh:
+	case FocusPresetHigh:
 		return "High"
+	case FocusPresetHighCognitiveLoad:
+		return "High cognitive load"
 	default:
 		return "Unknown"
 	}
 }
 
-func (d Density) Next() Density {
-	switch d {
-	case DensityLow:
-		return DensityMedium
-	case DensityMedium:
-		return DensityHigh
-	case DensityHigh:
-		return DensityLow
+func (p FocusPreset) Next() FocusPreset {
+	switch p {
+	case FocusPresetLow:
+		return FocusPresetMedium
+	case FocusPresetMedium:
+		return FocusPresetHigh
+	case FocusPresetHigh:
+		return FocusPresetHighCognitiveLoad
+	case FocusPresetHighCognitiveLoad:
+		return FocusPresetLow
 	default:
-		return DensityMedium
+		return FocusPresetMedium
 	}
 }
 
-func (d Density) Previous() Density {
-	switch d {
-	case DensityLow:
-		return DensityHigh
-	case DensityMedium:
-		return DensityLow
-	case DensityHigh:
-		return DensityMedium
+func (p FocusPreset) Previous() FocusPreset {
+	switch p {
+	case FocusPresetLow:
+		return FocusPresetHighCognitiveLoad
+	case FocusPresetMedium:
+		return FocusPresetLow
+	case FocusPresetHigh:
+		return FocusPresetMedium
+	case FocusPresetHighCognitiveLoad:
+		return FocusPresetHigh
 	default:
-		return DensityMedium
+		return FocusPresetMedium
 	}
 }
 
 type FocusState struct {
 	sampleIndex uint64
 
-	padPhasesL [3]float64
-	padPhasesR [3]float64
-	bedPhasesL [3]float64
-	bedPhasesR [3]float64
-	padLFO     float64
-	padDrift   float64
-	bedDrift   float64
+	padPhasesL   [3]float64
+	padPhasesR   [3]float64
+	bedPhasesL   [3]float64
+	bedPhasesR   [3]float64
+	pulsePhasesL [3]float64
+	pulsePhasesR [3]float64
+	padLFO       float64
+	padDrift     float64
+	bedDrift     float64
+	pulseDrift   float64
 
 	textureHP1L OnePoleHP
 	textureHP1R OnePoleHP
@@ -98,32 +108,88 @@ func NewFocusState() FocusState {
 	}
 }
 
-func (s *FocusState) NextPair(rng *xorShift32, density Density) (float32, float32) {
+type focusProfile struct {
+	padMix        float64
+	kickMix       float64
+	bedMix        float64
+	pulseMix      float64
+	textureMix    float64
+	pulseDepth    float64
+	bedPulseDepth float64
+}
+
+func focusPresetProfile(preset FocusPreset) focusProfile {
+	switch preset {
+	case FocusPresetLow:
+		return focusProfile{
+			padMix:        0.46,
+			kickMix:       0.23,
+			bedMix:        0.00,
+			pulseMix:      0.07,
+			textureMix:    0.00,
+			pulseDepth:    0.07,
+			bedPulseDepth: 0.03,
+		}
+	case FocusPresetMedium:
+		return focusProfile{
+			padMix:        0.46,
+			kickMix:       0.23,
+			bedMix:        0.19,
+			pulseMix:      0.10,
+			textureMix:    0.00,
+			pulseDepth:    0.09,
+			bedPulseDepth: 0.05,
+		}
+	case FocusPresetHigh:
+		return focusProfile{
+			padMix:        0.45,
+			kickMix:       0.22,
+			bedMix:        0.24,
+			pulseMix:      0.14,
+			textureMix:    0.080,
+			pulseDepth:    0.12,
+			bedPulseDepth: 0.07,
+		}
+	case FocusPresetHighCognitiveLoad:
+		return focusProfile{
+			padMix:        0.44,
+			kickMix:       0.20,
+			bedMix:        0.13,
+			pulseMix:      0.10,
+			textureMix:    0.00,
+			pulseDepth:    0.09,
+			bedPulseDepth: 0.036,
+		}
+	default:
+		return focusPresetProfile(FocusPresetMedium)
+	}
+}
+
+func (s *FocusState) NextPair(rng *xorShift32, preset FocusPreset) (float32, float32) {
 	const sampleRate = float64(config.SampleRate)
 
 	beatSamples := sampleRate * 60.0 / focusTempoBPM
 	barSamples := beatSamples * 4.0
 	beatOffset := math.Mod(float64(s.sampleIndex), beatSamples)
 	beatTime := beatOffset / sampleRate
+	beatPhase := beatOffset / beatSamples
 	barPhase := math.Mod(float64(s.sampleIndex)/barSamples, 1.0)
 	barIndex := uint64(float64(s.sampleIndex) / barSamples)
+	profile := focusPresetProfile(preset)
 
 	kick := softKick(beatTime)
-	padL, padR := s.nextPad(barPhase)
-	bedL, bedR := s.nextBed(barPhase)
+	padL, padR := s.nextPad(barPhase, preset)
+	bedL, bedR := s.nextBed(barPhase, preset)
+	pulseL, pulseR := s.nextPulseCarrier(preset)
 	textureL, textureR := s.nextTexture(rng, barPhase, barIndex)
+	pulseContour := structuredPulseContour(beatPhase, profile.pulseDepth)
+	bedContour := structuredPulseContour(beatPhase, profile.bedPulseDepth)
 
-	left := 0.48*padL + 0.26*float64(kick)
-	right := 0.48*padR + 0.26*float64(kick)
+	sustainedLeft := profile.padMix*padL + profile.bedMix*bedL + profile.textureMix*textureL
+	sustainedRight := profile.padMix*padR + profile.bedMix*bedR + profile.textureMix*textureR
 
-	switch density {
-	case DensityMedium:
-		left += 0.22 * bedL
-		right += 0.22 * bedR
-	case DensityHigh:
-		left += 0.22*bedL + 0.055*textureL
-		right += 0.22*bedR + 0.055*textureR
-	}
+	left := bedContour*sustainedLeft + profile.kickMix*float64(kick) + profile.pulseMix*pulseContour*pulseL
+	right := bedContour*sustainedRight + profile.kickMix*float64(kick) + profile.pulseMix*pulseContour*pulseR
 
 	leftSample := s.mixLP2L.Process(s.mixLP1L.Process(float32(left)))
 	rightSample := s.mixLP2R.Process(s.mixLP1R.Process(float32(right)))
@@ -140,11 +206,29 @@ func softKick(beatTime float64) float32 {
 	return float32(attack * decay * (0.78*fundamental + 0.22*undertone))
 }
 
-func (s *FocusState) nextPad(barPhase float64) (float64, float64) {
-	lfo := 0.95 + 0.05*math.Sin(s.padLFO)
-	s.padLFO = advancePhase(s.padLFO, 0.040)
-	s.padDrift = advancePhase(s.padDrift, 0.009)
+func structuredPulseContour(beatPhase, depth float64) float64 {
+	if depth <= 0 {
+		return 1.0
+	}
 
+	return 1.0 + depth*structuredPulseShape(beatPhase)
+}
+
+func structuredPulseShape(beatPhase float64) float64 {
+	const attackPhase = 0.18
+	if beatPhase <= attackPhase {
+		return smoothstep(beatPhase / attackPhase)
+	}
+
+	releasePhase := (beatPhase - attackPhase) / (1.0 - attackPhase)
+	return math.Exp(-4.7 * releasePhase)
+}
+
+func (s *FocusState) nextPad(barPhase float64, preset FocusPreset) (float64, float64) {
+	lfo := 0.95 + 0.05*math.Sin(s.padLFO)
+	padDriftRate := 0.009
+	swirl := 0.93 + 0.04*math.Sin(2.0*math.Pi*barPhase) + 0.02*math.Sin(s.padDrift+1.4)
+	level := 0.55
 	frequencies := [3]float64{73.42, 110.00, 146.83}
 	detune := [3]float64{0.9985, 1.0018, 0.9992}
 	weights := [3]float64{
@@ -152,8 +236,19 @@ func (s *FocusState) nextPad(barPhase float64) (float64, float64) {
 		0.34 + 0.014*math.Sin(s.padDrift+2.1),
 		0.24 + 0.012*math.Sin(s.padDrift+4.0),
 	}
+
+	if preset == FocusPresetHighCognitiveLoad {
+		lfo = 0.975 + 0.015*math.Sin(s.padLFO)
+		padDriftRate = 0.003
+		swirl = 0.96 + 0.01*math.Sin(s.padDrift+0.8)
+		level = 0.50
+		detune = [3]float64{0.9992, 1.0008, 0.9998}
+		weights = [3]float64{0.56, 0.28, 0.16}
+	}
+
+	s.padLFO = advancePhase(s.padLFO, 0.040)
+	s.padDrift = advancePhase(s.padDrift, padDriftRate)
 	normalizeWeights(&weights)
-	swirl := 0.93 + 0.04*math.Sin(2.0*math.Pi*barPhase) + 0.02*math.Sin(s.padDrift+1.4)
 
 	var left, right float64
 	for i := range frequencies {
@@ -163,12 +258,11 @@ func (s *FocusState) nextPad(barPhase float64) (float64, float64) {
 		right += weights[i] * math.Sin(s.padPhasesR[i])
 	}
 
-	return 0.55 * swirl * lfo * left, 0.55 * swirl * lfo * right
+	return level * swirl * lfo * left, level * swirl * lfo * right
 }
 
-func (s *FocusState) nextBed(barPhase float64) (float64, float64) {
-	s.bedDrift = advancePhase(s.bedDrift, 0.006)
-
+func (s *FocusState) nextBed(barPhase float64, preset FocusPreset) (float64, float64) {
+	bedDriftRate := 0.006
 	frequencies := [3]float64{174.61, 220.00, 261.63}
 	detune := [3]float64{1.0009, 0.9991, 1.0012}
 	weights := [3]float64{
@@ -176,8 +270,18 @@ func (s *FocusState) nextBed(barPhase float64) (float64, float64) {
 		0.35 + 0.014*math.Sin(s.bedDrift+2.4),
 		0.25 + 0.012*math.Sin(s.bedDrift+4.2),
 	}
-	normalizeWeights(&weights)
 	level := 0.28 * (0.92 + 0.05*math.Sin(s.bedDrift+0.8) + 0.02*math.Sin(2.0*math.Pi*barPhase))
+
+	if preset == FocusPresetHighCognitiveLoad {
+		bedDriftRate = 0.002
+		frequencies = [3]float64{146.83, 220.00, 293.66}
+		detune = [3]float64{1.0003, 0.9997, 1.0004}
+		weights = [3]float64{0.55, 0.30, 0.15}
+		level = 0.22 * (0.96 + 0.015*math.Sin(s.bedDrift+0.5))
+	}
+
+	s.bedDrift = advancePhase(s.bedDrift, bedDriftRate)
+	normalizeWeights(&weights)
 
 	var left, right float64
 	for i := range frequencies {
@@ -185,6 +289,42 @@ func (s *FocusState) nextBed(barPhase float64) (float64, float64) {
 		s.bedPhasesR[i] = advancePhase(s.bedPhasesR[i], frequencies[i]/detune[i])
 		left += weights[i] * math.Sin(s.bedPhasesL[i])
 		right += weights[i] * math.Sin(s.bedPhasesR[i])
+	}
+
+	return level * left, level * right
+}
+
+func (s *FocusState) nextPulseCarrier(preset FocusPreset) (float64, float64) {
+	pulseDriftRate := 0.004
+	frequencies := [3]float64{98.00, 123.47, 146.83}
+	detune := [3]float64{0.9994, 1.0007, 0.9998}
+	weights := [3]float64{
+		0.48 + 0.008*math.Sin(s.pulseDrift),
+		0.31 + 0.006*math.Sin(s.pulseDrift+2.2),
+		0.21 + 0.005*math.Sin(s.pulseDrift+4.1),
+	}
+	level := 0.18
+
+	if preset == FocusPresetHigh {
+		level = 0.19
+	}
+	if preset == FocusPresetHighCognitiveLoad {
+		pulseDriftRate = 0.0015
+		frequencies = [3]float64{73.42, 110.00, 146.83}
+		detune = [3]float64{0.9998, 1.0002, 1.0001}
+		weights = [3]float64{0.60, 0.27, 0.13}
+		level = 0.16
+	}
+
+	s.pulseDrift = advancePhase(s.pulseDrift, pulseDriftRate)
+	normalizeWeights(&weights)
+
+	var left, right float64
+	for i := range frequencies {
+		s.pulsePhasesL[i] = advancePhase(s.pulsePhasesL[i], frequencies[i]*detune[i])
+		s.pulsePhasesR[i] = advancePhase(s.pulsePhasesR[i], frequencies[i]/detune[i])
+		left += weights[i] * math.Sin(s.pulsePhasesL[i])
+		right += weights[i] * math.Sin(s.pulsePhasesR[i])
 	}
 
 	return level * left, level * right
