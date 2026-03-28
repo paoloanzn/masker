@@ -31,6 +31,7 @@ func Run() error {
 }
 
 func (a *App) onReady() {
+	systray.SetTemplateIcon(trayIcon, trayIcon)
 	systray.SetTitle("Mask")
 	systray.SetTooltip("Noise masking")
 
