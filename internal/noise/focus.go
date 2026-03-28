@@ -197,12 +197,9 @@ func (s *FocusState) nextTexture(rng *xorShift32, barPhase float64, barIndex uin
 	left := s.textureLP2L.Process(s.textureLP1L.Process(s.textureHP2L.Process(s.textureHP1L.Process(float32(whiteL)))))
 	right := s.textureLP2R.Process(s.textureLP1R.Process(s.textureHP2R.Process(s.textureHP1R.Process(float32(whiteR)))))
 
-	currentDepth := 0.18 + 0.10*unitHash(barIndex)
-	nextDepth := 0.18 + 0.10*unitHash(barIndex+1)
-	depth := lerp(currentDepth, nextDepth, smoothstep(barPhase))
-	contour := 0.88 + 0.12*math.Sin(2.0*math.Pi*(barPhase-0.17))
+	depth := textureDepth(barIndex, barPhase)
 
-	return depth * contour * float64(left), depth * contour * float64(right)
+	return depth * float64(left), depth * float64(right)
 }
 
 func advancePhase(phase, frequency float64) float64 {
@@ -236,6 +233,12 @@ func smoothstep(value float64) float64 {
 
 func lerp(a, b, t float64) float64 {
 	return a + (b-a)*t
+}
+
+func textureDepth(barIndex uint64, barPhase float64) float64 {
+	current := 0.16 + 0.14*unitHash(barIndex)
+	next := 0.16 + 0.14*unitHash(barIndex+1)
+	return lerp(current, next, smoothstep(barPhase))
 }
 
 func unitHash(value uint64) float64 {

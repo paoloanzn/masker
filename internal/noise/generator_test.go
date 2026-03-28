@@ -168,6 +168,28 @@ func TestFocusDensityAddsLayers(t *testing.T) {
 	}
 }
 
+func TestTextureDepthInterpolatesAcrossBars(t *testing.T) {
+	start := textureDepth(7, 0.0)
+	end := textureDepth(7, 1.0)
+	mid := textureDepth(7, 0.5)
+
+	wantStart := 0.16 + 0.14*unitHash(7)
+	wantEnd := 0.16 + 0.14*unitHash(8)
+
+	if start != wantStart {
+		t.Fatalf("start depth = %.6f, want %.6f", start, wantStart)
+	}
+	if end != wantEnd {
+		t.Fatalf("end depth = %.6f, want %.6f", end, wantEnd)
+	}
+
+	lower := math.Min(wantStart, wantEnd)
+	upper := math.Max(wantStart, wantEnd)
+	if mid < lower || mid > upper {
+		t.Fatalf("mid depth = %.6f, want within [%.6f, %.6f]", mid, lower, upper)
+	}
+}
+
 func TestFillWritesStereoSamples(t *testing.T) {
 	generator := NewGenerator()
 	samples := make([]float32, 16)
