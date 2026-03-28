@@ -47,7 +47,7 @@ func (a *App) onReady() {
 
 	brown := systray.AddMenuItemCheckbox("Brown", "Low rumble / HVAC / travel", true)
 	pink := systray.AddMenuItemCheckbox("Pink", "General ambient masking", false)
-	voice := systray.AddMenuItemCheckbox("Voice-focused", "Reduce speech intelligibility", false)
+	speech := systray.AddMenuItemCheckbox("Speech-shaped", "Target the speech band more directly", false)
 
 	systray.AddSeparator()
 
@@ -58,7 +58,7 @@ func (a *App) onReady() {
 
 	quit := systray.AddMenuItem("Quit", "Quit the app")
 
-	a.updateChecks(brown, pink, voice)
+	a.updateChecks(brown, pink, speech)
 
 	go func() {
 		for {
@@ -67,8 +67,8 @@ func (a *App) onReady() {
 				a.generator.SetMode(noise.ModeBrown)
 			case <-pink.ClickedCh:
 				a.generator.SetMode(noise.ModePink)
-			case <-voice.ClickedCh:
-				a.generator.SetMode(noise.ModeVoice)
+			case <-speech.ClickedCh:
+				a.generator.SetMode(noise.ModeSpeech)
 			case <-volumeUp.ClickedCh:
 				a.generator.SetVolume(a.generator.Volume() + config.VolumeStep)
 			case <-volumeDown.ClickedCh:
@@ -78,7 +78,7 @@ func (a *App) onReady() {
 				return
 			}
 
-			a.updateChecks(brown, pink, voice)
+			a.updateChecks(brown, pink, speech)
 			status.SetTitle(a.statusText())
 		}
 	}()
@@ -88,19 +88,19 @@ func (a *App) onExit() {
 	a.engine.Stop()
 }
 
-func (a *App) updateChecks(brown, pink, voice *systray.MenuItem) {
+func (a *App) updateChecks(brown, pink, speech *systray.MenuItem) {
 	mode := a.generator.Mode()
 	brown.Uncheck()
 	pink.Uncheck()
-	voice.Uncheck()
+	speech.Uncheck()
 
 	switch mode {
 	case noise.ModeBrown:
 		brown.Check()
 	case noise.ModePink:
 		pink.Check()
-	case noise.ModeVoice:
-		voice.Check()
+	case noise.ModeSpeech:
+		speech.Check()
 	}
 }
 
