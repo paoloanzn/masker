@@ -8,7 +8,7 @@ Masker is a small Go menu bar utility that plays continuous masking audio for op
 - Starts in `Focus`, the recommended slow-beat mode for general productivity
 - Provides a separate `ADHD / attention problems` mode with evidence-linked steady-state `White` and `Pink` presets
 - Adjust Focus presets without changing the macro-tempo
-- Switch between Focus and masking-oriented Brown, Pink, and Speech-shaped modes
+- Switch between Focus and masking-oriented Brown and Speech-shaped modes
 - Adjust volume without reopening the app
 - Detaches from the terminal by default when started from the command line
 
@@ -62,7 +62,7 @@ The default `Focus` mode is the main recommended preset for general productivity
 - `High`: adds very subtle background motion while keeping the same tempo and low salience
 - `High cognitive load`: keeps the same BPM range while further reducing melodic novelty and harmonic motion
 
-The preset controls apply only to `Focus`. `Brown`, `Pink`, and `Speech-shaped` remain masking-style options rather than slow-beat productivity presets.
+The preset controls apply only to `Focus`. `Brown` and `Speech-shaped` remain masking-style options rather than slow-beat productivity presets.
 
 Masker also exposes a separate `ADHD / attention problems` mode. That mode intentionally limits itself to steady-state `White` and `Pink` presets:
 

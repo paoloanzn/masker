@@ -18,7 +18,6 @@ type App struct {
 	focus           *systray.MenuItem
 	adhd            *systray.MenuItem
 	brown           *systray.MenuItem
-	pink            *systray.MenuItem
 	speech          *systray.MenuItem
 	presetLow       *systray.MenuItem
 	presetMedium    *systray.MenuItem
@@ -60,7 +59,6 @@ func (a *App) onReady() {
 	a.focus = systray.AddMenuItemCheckbox("Focus (Recommended)", "Recommended slow-beat mode for general productivity", true)
 	a.adhd = systray.AddMenuItemCheckbox("ADHD / attention problems", "Steady-state white or pink noise presets intended for ADHD-like inattentive symptoms", false)
 	a.brown = systray.AddMenuItemCheckbox("Brown", "Masking option for low rumble, HVAC, or travel", false)
-	a.pink = systray.AddMenuItemCheckbox("Pink", "Masking option for general ambient coverage", false)
 	a.speech = systray.AddMenuItemCheckbox("Speech-shaped", "Masking option that targets the speech band more directly", false)
 
 	systray.AddSeparator()
@@ -93,8 +91,6 @@ func (a *App) onReady() {
 				a.generator.SetMode(noise.ModeADHD)
 			case <-a.brown.ClickedCh:
 				a.generator.SetMode(noise.ModeBrown)
-			case <-a.pink.ClickedCh:
-				a.generator.SetMode(noise.ModePink)
 			case <-a.speech.ClickedCh:
 				a.generator.SetMode(noise.ModeSpeech)
 			case <-a.presetLow.ClickedCh:
@@ -133,7 +129,6 @@ func (a *App) updateChecks() {
 	a.focus.Uncheck()
 	a.adhd.Uncheck()
 	a.brown.Uncheck()
-	a.pink.Uncheck()
 	a.speech.Uncheck()
 
 	switch mode {
@@ -143,8 +138,6 @@ func (a *App) updateChecks() {
 		a.adhd.Check()
 	case noise.ModeBrown:
 		a.brown.Check()
-	case noise.ModePink:
-		a.pink.Check()
 	case noise.ModeSpeech:
 		a.speech.Check()
 	}
@@ -198,7 +191,7 @@ func (a *App) updateChecks() {
 }
 
 func (a *App) syncUI() {
-	if a.focus != nil && a.adhd != nil && a.brown != nil && a.pink != nil && a.speech != nil && a.presetLow != nil && a.presetMedium != nil && a.presetHigh != nil && a.presetCognitive != nil && a.adhdWhite != nil && a.adhdPink != nil {
+	if a.focus != nil && a.adhd != nil && a.brown != nil && a.speech != nil && a.presetLow != nil && a.presetMedium != nil && a.presetHigh != nil && a.presetCognitive != nil && a.adhdWhite != nil && a.adhdPink != nil {
 		a.updateChecks()
 	}
 	if a.status != nil {

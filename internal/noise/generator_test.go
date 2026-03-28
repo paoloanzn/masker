@@ -15,7 +15,6 @@ func TestModeString(t *testing.T) {
 		{mode: ModeFocus, want: "Focus"},
 		{mode: ModeADHD, want: "ADHD / Attention"},
 		{mode: ModeBrown, want: "Brown"},
-		{mode: ModePink, want: "Pink"},
 		{mode: ModeSpeech, want: "Speech-shaped"},
 		{mode: Mode(99), want: "Unknown"},
 	}
@@ -36,9 +35,8 @@ func TestModeCycle(t *testing.T) {
 	}{
 		{name: "focus wraps", start: ModeFocus, next: ModeADHD, previous: ModeSpeech},
 		{name: "adhd wraps", start: ModeADHD, next: ModeBrown, previous: ModeFocus},
-		{name: "brown wraps", start: ModeBrown, next: ModePink, previous: ModeADHD},
-		{name: "pink wraps", start: ModePink, next: ModeSpeech, previous: ModeBrown},
-		{name: "speech wraps", start: ModeSpeech, next: ModeFocus, previous: ModePink},
+		{name: "brown wraps", start: ModeBrown, next: ModeSpeech, previous: ModeADHD},
+		{name: "speech wraps", start: ModeSpeech, next: ModeFocus, previous: ModeBrown},
 		{name: "unknown falls back", start: Mode(99), next: ModeFocus, previous: ModeFocus},
 	}
 
@@ -154,7 +152,6 @@ func TestModeGainCompensationOrdering(t *testing.T) {
 	focus := modeGain(ModeFocus)
 	adhdWhite := adhdPresetGain(ADHDPresetWhite)
 	adhdPink := adhdPresetGain(ADHDPresetPink)
-	pink := modeGain(ModePink)
 	speech := modeGain(ModeSpeech)
 
 	if !(brown > focus) {
@@ -163,11 +160,11 @@ func TestModeGainCompensationOrdering(t *testing.T) {
 	if !(focus > adhdPink) {
 		t.Fatalf("focus gain = %.2f, want > adhd pink gain %.2f", focus, adhdPink)
 	}
-	if !(focus > pink) {
-		t.Fatalf("focus gain = %.2f, want > pink gain %.2f", focus, pink)
+	if !(focus > adhdPink) {
+		t.Fatalf("focus gain = %.2f, want > adhd pink gain %.2f", focus, adhdPink)
 	}
-	if !(brown > pink) {
-		t.Fatalf("brown gain = %.2f, want > pink gain %.2f", brown, pink)
+	if !(brown > adhdPink) {
+		t.Fatalf("brown gain = %.2f, want > adhd pink gain %.2f", brown, adhdPink)
 	}
 	if !(adhdPink > adhdWhite) {
 		t.Fatalf("adhd pink gain = %.2f, want > adhd white gain %.2f", adhdPink, adhdWhite)
@@ -175,8 +172,8 @@ func TestModeGainCompensationOrdering(t *testing.T) {
 	if !(adhdWhite > speech) {
 		t.Fatalf("adhd white gain = %.2f, want > speech gain %.2f", adhdWhite, speech)
 	}
-	if !(pink > speech) {
-		t.Fatalf("pink gain = %.2f, want > speech gain %.2f", pink, speech)
+	if !(adhdPink > speech) {
+		t.Fatalf("adhd pink gain = %.2f, want > speech gain %.2f", adhdPink, speech)
 	}
 }
 
@@ -186,9 +183,6 @@ func TestModeGainCompensationValues(t *testing.T) {
 	}
 	if got := modeGain(ModeBrown); got != 4.10 {
 		t.Fatalf("brown gain = %.2f, want 4.10", got)
-	}
-	if got := modeGain(ModePink); got != 1.00 {
-		t.Fatalf("pink gain = %.2f, want 1.00", got)
 	}
 	if got := modeGain(ModeSpeech); got != 0.24 {
 		t.Fatalf("speech gain = %.2f, want 0.24", got)
@@ -202,8 +196,8 @@ func TestModeGainCompensationValues(t *testing.T) {
 }
 
 func TestADHDPinkGainMatchesStandardPink(t *testing.T) {
-	if got, want := adhdPresetGain(ADHDPresetPink), modeGain(ModePink); got != want {
-		t.Fatalf("adhd pink gain = %.2f, want standard pink gain %.2f", got, want)
+	if got, want := adhdPresetGain(ADHDPresetPink), float32(1.00); got != want {
+		t.Fatalf("adhd pink gain = %.2f, want prior standalone pink gain %.2f", got, want)
 	}
 }
 

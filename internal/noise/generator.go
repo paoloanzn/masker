@@ -13,7 +13,6 @@ const (
 	ModeFocus Mode = iota
 	ModeADHD
 	ModeBrown
-	ModePink
 	ModeSpeech
 )
 
@@ -25,8 +24,6 @@ func (m Mode) String() string {
 		return "ADHD / Attention"
 	case ModeBrown:
 		return "Brown"
-	case ModePink:
-		return "Pink"
 	case ModeSpeech:
 		return "Speech-shaped"
 	default:
@@ -41,8 +38,6 @@ func (m Mode) Next() Mode {
 	case ModeADHD:
 		return ModeBrown
 	case ModeBrown:
-		return ModePink
-	case ModePink:
 		return ModeSpeech
 	case ModeSpeech:
 		return ModeFocus
@@ -59,10 +54,8 @@ func (m Mode) Previous() Mode {
 		return ModeFocus
 	case ModeBrown:
 		return ModeADHD
-	case ModePink:
-		return ModeBrown
 	case ModeSpeech:
-		return ModePink
+		return ModeBrown
 	default:
 		return ModeFocus
 	}
@@ -217,8 +210,6 @@ func (g *Generator) Fill(samples []float32) {
 			left, right = g.nextADHDPair(adhdPreset)
 		case ModeBrown:
 			left, right = g.nextBrownPair()
-		case ModePink:
-			left, right = g.nextPinkPair()
 		case ModeSpeech:
 			left, right = g.nextSpeechPair()
 		default:
@@ -244,8 +235,6 @@ func modeGain(mode Mode) float32 {
 	case ModeBrown:
 		// Calibrated against hearing-weighted measurements so mode switches are less jarring.
 		return 4.10
-	case ModePink:
-		return 1.00
 	case ModeSpeech:
 		return 0.24
 	default:
@@ -259,8 +248,8 @@ func adhdPresetGain(preset ADHDPreset) float32 {
 		// White noise is compensated down to offset its brighter perceived intensity.
 		return 0.42
 	case ADHDPresetPink:
-		// Match the standard pink mode calibration so switching between them is not jarring.
-		return modeGain(ModePink)
+		// Match the prior standalone pink calibration so switching is not jarring.
+		return 1.00
 	default:
 		return 0.42
 	}
