@@ -54,7 +54,7 @@ Masker will relaunch itself in the background by default so the shell prompt ret
 masker --foreground
 ```
 
-The default `Focus` mode is the main recommended preset for general productivity. It uses a steady 4/4 slow beat with a soft beat-synced pulse overlay across all focus presets:
+The default `Focus` mode is the main recommended preset for general productivity. It uses a steady 4/4 slow beat with a soft beat-synced pulse overlay that gently contours the sustained focus bed across all focus presets:
 
 - `Low`: sparse pad plus a soft carrier pulse that reinforces the beat without obvious tremolo
 - `Medium`: the main recommended preset; adds a soft harmonic bed under the same structured pulse scaffold

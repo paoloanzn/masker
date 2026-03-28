@@ -184,6 +184,9 @@ func TestStructuredPulseContourStaysSubtle(t *testing.T) {
 	start := structuredPulseContour(0.0, depth)
 	peak := structuredPulseContour(0.18, depth)
 	tail := structuredPulseContour(0.95, depth)
+	shapeStart := structuredPulseShape(0.0)
+	shapePeak := structuredPulseShape(0.18)
+	shapeLate := structuredPulseShape(0.95)
 
 	if start != 1.0 {
 		t.Fatalf("start contour = %.6f, want 1.0", start)
@@ -193,6 +196,15 @@ func TestStructuredPulseContourStaysSubtle(t *testing.T) {
 	}
 	if tail <= 1.0 || tail >= peak {
 		t.Fatalf("tail contour = %.6f, want a long release between 1.0 and peak %.6f", tail, peak)
+	}
+	if shapeStart != 0.0 {
+		t.Fatalf("shape start = %.6f, want 0", shapeStart)
+	}
+	if shapePeak != 1.0 {
+		t.Fatalf("shape peak = %.6f, want 1", shapePeak)
+	}
+	if shapeLate <= 0.0 || shapeLate >= 1.0 {
+		t.Fatalf("shape late = %.6f, want within (0, 1)", shapeLate)
 	}
 }
 
@@ -212,6 +224,56 @@ func TestHighCognitiveLoadPresetReducesMotionProfile(t *testing.T) {
 	}
 	if high.pulseDepth < medium.pulseDepth {
 		t.Fatalf("high pulse depth = %.6f, want >= medium pulse depth %.6f", high.pulseDepth, medium.pulseDepth)
+	}
+	if cognitive.bedPulseDepth >= high.bedPulseDepth {
+		t.Fatalf("cognitive bed pulse depth = %.6f, want < high bed pulse depth %.6f", cognitive.bedPulseDepth, high.bedPulseDepth)
+	}
+	for _, test := range []struct {
+		name    string
+		profile focusProfile
+	}{
+		{name: "medium", profile: medium},
+		{name: "high", profile: high},
+		{name: "cognitive", profile: cognitive},
+	} {
+		ratio := test.profile.bedPulseDepth / test.profile.pulseDepth
+		if ratio < 0.399 || ratio > 0.601 {
+			t.Fatalf("%s bed-to-pulse ratio = %.6f, want within [0.40, 0.60]", test.name, ratio)
+		}
+	}
+}
+
+func TestFocusStructuredPulseOverlayValidation(t *testing.T) {
+	beatSamples := int(math.Round(config.SampleRate * 60.0 / focusTempoBPM))
+	derivedTempo := 60.0 * config.SampleRate / float64(beatSamples)
+	if math.Abs(derivedTempo-focusTempoBPM) > 0.05 {
+		t.Fatalf("derived tempo = %.6f BPM, want %.6f BPM", derivedTempo, focusTempoBPM)
+	}
+
+	medium := analyzeFocusPreset(FocusPresetMedium)
+	high := analyzeFocusPreset(FocusPresetHigh)
+	cognitive := analyzeFocusPreset(FocusPresetHighCognitiveLoad)
+
+	if medium.peakWindowIndex != high.peakWindowIndex {
+		t.Fatalf("peak window mismatch: medium=%d high=%d, want one contour cycle aligned per beat", medium.peakWindowIndex, high.peakWindowIndex)
+	}
+	if medium.peakWindowIndex > 2 {
+		t.Fatalf("peak window index = %d, want an early-beat contour peak", medium.peakWindowIndex)
+	}
+	if medium.meanSwing <= 0 || medium.meanSwing >= 0.20 {
+		t.Fatalf("medium mean swing = %.6f, want within (0, 0.20)", medium.meanSwing)
+	}
+	if cognitive.meanSwing >= high.meanSwing {
+		t.Fatalf("cognitive mean swing = %.6f, want < high mean swing %.6f", cognitive.meanSwing, high.meanSwing)
+	}
+	if high.windowPeakConsistency < 0.99 {
+		t.Fatalf("high peak consistency = %.6f, want a single dominant peak window per beat", high.windowPeakConsistency)
+	}
+	if high.beatRMSCV >= 0.08 {
+		t.Fatalf("high beat RMS CV = %.6f, want narrow beat-to-beat loudness swing", high.beatRMSCV)
+	}
+	if cognitive.beatRMSCV >= 0.08 {
+		t.Fatalf("cognitive beat RMS CV = %.6f, want narrow beat-to-beat loudness swing", cognitive.beatRMSCV)
 	}
 }
 
@@ -365,4 +427,119 @@ func focusMotionEnergy(preset FocusPreset) float64 {
 	}
 
 	return math.Sqrt(energy / float64(counted))
+}
+
+type focusBeatAnalysis struct {
+	meanSwing             float64
+	beatRMSCV             float64
+	peakWindowIndex       int
+	windowPeakConsistency float64
+}
+
+func analyzeFocusPreset(preset FocusPreset) focusBeatAnalysis {
+	rng := xorShift32{x: 0x12345678}
+	state := NewFocusState()
+	beatSamples := int(math.Round(config.SampleRate * 60.0 / focusTempoBPM))
+	windowCount := 8
+	windowSamples := beatSamples / windowCount
+	settleBeats := 2
+	measuredBeats := 8
+	totalSamples := (settleBeats + measuredBeats) * beatSamples
+
+	swings := make([]float64, 0, measuredBeats)
+	beatRMS := make([]float64, 0, measuredBeats)
+	peakCounts := make([]int, windowCount)
+
+	for beat := 0; beat < settleBeats+measuredBeats; beat++ {
+		windowEnergy := make([]float64, windowCount)
+		windowSamplesCount := make([]int, windowCount)
+		var beatEnergy float64
+		var beatCount int
+
+		for i := 0; i < beatSamples && beat*beatSamples+i < totalSamples; i++ {
+			left, right := state.NextPair(&rng, preset)
+			energy := float64(left*left+right*right) / 2.0
+			windowIndex := i / windowSamples
+			if windowIndex >= windowCount {
+				windowIndex = windowCount - 1
+			}
+
+			windowEnergy[windowIndex] += energy
+			windowSamplesCount[windowIndex]++
+			beatEnergy += energy
+			beatCount++
+		}
+
+		if beat < settleBeats {
+			continue
+		}
+
+		windowRMS := make([]float64, windowCount)
+		minRMS := math.MaxFloat64
+		maxRMS := 0.0
+		peakIndex := 0
+
+		for i := range windowEnergy {
+			windowRMS[i] = math.Sqrt(windowEnergy[i] / float64(windowSamplesCount[i]))
+			if windowRMS[i] < minRMS {
+				minRMS = windowRMS[i]
+			}
+			if windowRMS[i] > maxRMS {
+				maxRMS = windowRMS[i]
+				peakIndex = i
+			}
+		}
+
+		peakCounts[peakIndex]++
+		swings = append(swings, (maxRMS-minRMS)/maxRMS)
+		beatRMS = append(beatRMS, math.Sqrt(beatEnergy/float64(beatCount)))
+	}
+
+	peakIndex := 0
+	peakCount := 0
+	for i, count := range peakCounts {
+		if count > peakCount {
+			peakCount = count
+			peakIndex = i
+		}
+	}
+
+	return focusBeatAnalysis{
+		meanSwing:             mean(swings),
+		beatRMSCV:             coefficientOfVariation(beatRMS),
+		peakWindowIndex:       peakIndex,
+		windowPeakConsistency: float64(peakCount) / float64(measuredBeats),
+	}
+}
+
+func mean(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
+	var total float64
+	for _, value := range values {
+		total += value
+	}
+
+	return total / float64(len(values))
+}
+
+func coefficientOfVariation(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
+	m := mean(values)
+	if m == 0 {
+		return 0
+	}
+
+	var variance float64
+	for _, value := range values {
+		delta := value - m
+		variance += delta * delta
+	}
+
+	return math.Sqrt(variance/float64(len(values))) / m
 }

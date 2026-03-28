@@ -109,51 +109,56 @@ func NewFocusState() FocusState {
 }
 
 type focusProfile struct {
-	padMix     float64
-	kickMix    float64
-	bedMix     float64
-	pulseMix   float64
-	textureMix float64
-	pulseDepth float64
+	padMix        float64
+	kickMix       float64
+	bedMix        float64
+	pulseMix      float64
+	textureMix    float64
+	pulseDepth    float64
+	bedPulseDepth float64
 }
 
 func focusPresetProfile(preset FocusPreset) focusProfile {
 	switch preset {
 	case FocusPresetLow:
 		return focusProfile{
-			padMix:     0.46,
-			kickMix:    0.23,
-			bedMix:     0.00,
-			pulseMix:   0.07,
-			textureMix: 0.00,
-			pulseDepth: 0.07,
+			padMix:        0.46,
+			kickMix:       0.23,
+			bedMix:        0.00,
+			pulseMix:      0.07,
+			textureMix:    0.00,
+			pulseDepth:    0.07,
+			bedPulseDepth: 0.03,
 		}
 	case FocusPresetMedium:
 		return focusProfile{
-			padMix:     0.46,
-			kickMix:    0.23,
-			bedMix:     0.19,
-			pulseMix:   0.10,
-			textureMix: 0.00,
-			pulseDepth: 0.09,
+			padMix:        0.46,
+			kickMix:       0.23,
+			bedMix:        0.19,
+			pulseMix:      0.10,
+			textureMix:    0.00,
+			pulseDepth:    0.09,
+			bedPulseDepth: 0.05,
 		}
 	case FocusPresetHigh:
 		return focusProfile{
-			padMix:     0.45,
-			kickMix:    0.22,
-			bedMix:     0.24,
-			pulseMix:   0.14,
-			textureMix: 0.080,
-			pulseDepth: 0.12,
+			padMix:        0.45,
+			kickMix:       0.22,
+			bedMix:        0.24,
+			pulseMix:      0.14,
+			textureMix:    0.080,
+			pulseDepth:    0.12,
+			bedPulseDepth: 0.07,
 		}
 	case FocusPresetHighCognitiveLoad:
 		return focusProfile{
-			padMix:     0.44,
-			kickMix:    0.22,
-			bedMix:     0.14,
-			pulseMix:   0.12,
-			textureMix: 0.00,
-			pulseDepth: 0.10,
+			padMix:        0.44,
+			kickMix:       0.20,
+			bedMix:        0.13,
+			pulseMix:      0.10,
+			textureMix:    0.00,
+			pulseDepth:    0.09,
+			bedPulseDepth: 0.036,
 		}
 	default:
 		return focusPresetProfile(FocusPresetMedium)
@@ -178,12 +183,13 @@ func (s *FocusState) NextPair(rng *xorShift32, preset FocusPreset) (float32, flo
 	pulseL, pulseR := s.nextPulseCarrier(preset)
 	textureL, textureR := s.nextTexture(rng, barPhase, barIndex)
 	pulseContour := structuredPulseContour(beatPhase, profile.pulseDepth)
+	bedContour := structuredPulseContour(beatPhase, profile.bedPulseDepth)
 
-	left := profile.padMix*padL + profile.kickMix*float64(kick)
-	right := profile.padMix*padR + profile.kickMix*float64(kick)
+	sustainedLeft := profile.padMix*padL + profile.bedMix*bedL + profile.textureMix*textureL
+	sustainedRight := profile.padMix*padR + profile.bedMix*bedR + profile.textureMix*textureR
 
-	left += profile.bedMix*bedL + profile.pulseMix*pulseContour*pulseL + profile.textureMix*textureL
-	right += profile.bedMix*bedR + profile.pulseMix*pulseContour*pulseR + profile.textureMix*textureR
+	left := bedContour*sustainedLeft + profile.kickMix*float64(kick) + profile.pulseMix*pulseContour*pulseL
+	right := bedContour*sustainedRight + profile.kickMix*float64(kick) + profile.pulseMix*pulseContour*pulseR
 
 	leftSample := s.mixLP2L.Process(s.mixLP1L.Process(float32(left)))
 	rightSample := s.mixLP2R.Process(s.mixLP1R.Process(float32(right)))
@@ -205,13 +211,17 @@ func structuredPulseContour(beatPhase, depth float64) float64 {
 		return 1.0
 	}
 
+	return 1.0 + depth*structuredPulseShape(beatPhase)
+}
+
+func structuredPulseShape(beatPhase float64) float64 {
 	const attackPhase = 0.18
 	if beatPhase <= attackPhase {
-		return 1.0 + depth*smoothstep(beatPhase/attackPhase)
+		return smoothstep(beatPhase / attackPhase)
 	}
 
 	releasePhase := (beatPhase - attackPhase) / (1.0 - attackPhase)
-	return 1.0 + depth*math.Exp(-5.2*releasePhase)
+	return math.Exp(-4.7 * releasePhase)
 }
 
 func (s *FocusState) nextPad(barPhase float64, preset FocusPreset) (float64, float64) {
