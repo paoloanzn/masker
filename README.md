@@ -6,6 +6,8 @@ Masker is a small Go menu bar utility that plays continuous masking audio for op
 
 - Lives in the macOS menu bar with a minimal tray UI
 - Starts in `Focus`, the recommended slow-beat mode for general productivity
+- Asks once on first run whether you are using it primarily for ADHD-like inattentive symptoms
+- Provides a separate `ADHD / attention problems` mode with evidence-linked steady-state `White` and `Pink` presets
 - Adjust Focus presets without changing the macro-tempo
 - Switch between Focus and masking-oriented Brown, Pink, and Speech-shaped modes
 - Adjust volume without reopening the app
@@ -62,6 +64,19 @@ The default `Focus` mode is the main recommended preset for general productivity
 - `High cognitive load`: keeps the same BPM range while further reducing melodic novelty and harmonic motion
 
 The preset controls apply only to `Focus`. `Brown`, `Pink`, and `Speech-shaped` remain masking-style options rather than slow-beat productivity presets.
+
+On first launch, Masker asks:
+
+```text
+Are you using this primarily for ADHD-like inattentive symptoms?
+```
+
+If you answer `Yes`, Masker will auto-recommend the separate `ADHD / attention problems` mode on startup and begin with the `White` preset at the lowest default volume step. That mode intentionally limits itself to steady-state `White` and `Pink` presets:
+
+- `White`: broadband white noise with a flat spectral density
+- `Pink`: steady pink noise with an approximate 1/f spectral tilt
+
+If you answer `No`, Masker keeps the normal `Focus` recommendation and does not auto-recommend the ADHD-specific mode.
 
 ## Development
 
