@@ -1,0 +1,21 @@
+# App Structure - masker
+# Last updated: 2026-03-28
+
+## Repositories
+- GitHub: not linked
+
+## Backend (Supabase)
+- Project ID: not used
+- Project URL: not used
+- Region: not used
+- Key tables: none
+
+## Deployed Services (Railway)
+- Frontend: not deployed
+- API: not deployed
+
+## Environment Variables Required
+- None
+
+## Notes
+Local macOS menu bar audio masker written in Go. No remote repo, backend, or deployment configured.
